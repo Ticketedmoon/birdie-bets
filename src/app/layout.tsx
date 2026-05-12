@@ -14,7 +14,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Golf Tourney Tracker",
+  title: "BirdieBets",
   description: "Pick your golfers, track the tournament, compete with friends",
 };
 

@@ -20,7 +20,7 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <div className="mb-4 text-5xl sm:text-6xl">⛳</div>
           <h1 className="mb-2 text-2xl font-bold text-gray-900 sm:text-3xl">
-            Golf Tourney Tracker
+            BirdieBets
           </h1>
           <p className="text-sm leading-relaxed text-gray-600 sm:text-base">
             Pick your golfers, track tournaments, compete with friends

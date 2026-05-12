@@ -97,7 +97,7 @@ function CreatePartyContent() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
+    <div className="w-full px-4 py-8 sm:px-8 sm:py-10 lg:px-12" style={{ maxWidth: "800px", margin: "0 auto" }}>
       <h1 className="mb-8 text-2xl font-bold text-gray-900 sm:mb-10 sm:text-3xl">Create a Party</h1>
 
       <form onSubmit={handleSubmit} className="w-full space-y-6 sm:space-y-8">

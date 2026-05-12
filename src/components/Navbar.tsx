@@ -12,7 +12,7 @@ export function Navbar() {
         <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 py-3 sm:h-16 sm:min-h-0 sm:flex-nowrap sm:py-0">
           <Link href="/dashboard" className="flex min-w-0 items-center gap-2 font-bold text-base sm:text-xl">
             <span className="shrink-0">⛳</span>
-            <span className="truncate">Golf Tourney Tracker</span>
+            <span className="truncate">BirdieBets</span>
           </Link>
           {user && (
             <div className="flex w-full items-center justify-end gap-2 sm:w-auto sm:gap-5">
