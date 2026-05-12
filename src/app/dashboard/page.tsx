@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { getPartiesForUser } from "@/lib/firestore";
+import { getPartiesForUser, deleteParty } from "@/lib/firestore";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Link from "next/link";
@@ -26,26 +26,88 @@ function statusBadge(status: Party["status"]) {
   );
 }
 
-function PartyCard({ party }: { party: Party }) {
+function PartyCard({
+  party,
+  isCreator,
+  onDelete,
+}: {
+  party: Party;
+  isCreator: boolean;
+  onDelete: (partyId: string) => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setDeleting(true);
+    await onDelete(party.id);
+  };
+
+  const handleCancelDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setConfirmDelete(false);
+  };
+
   return (
-    <Link
-      href={`/party/${party.id}`}
-      className="group block rounded-xl border border-gray-200 bg-white px-4 py-4 transition-all hover:border-gray-300 hover:shadow-md sm:px-6 sm:py-5"
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="min-w-0">
-          <div className="mb-1.5 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <h3 className="text-base font-semibold text-gray-900 truncate">{party.name}</h3>
-            {statusBadge(party.status)}
+    <div className="group relative rounded-xl border border-gray-200 bg-white transition-all hover:border-gray-300 hover:shadow-md">
+      <Link
+        href={`/party/${party.id}`}
+        className="block px-5 py-4 sm:px-6 sm:py-5"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1.5 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <h3 className="text-base font-semibold text-gray-900 truncate">{party.name}</h3>
+              {statusBadge(party.status)}
+              {party.buyIn > 0 && (
+                <span className="text-xs text-gray-400">€{party.buyIn} buy-in</span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500">
+              {party.tournamentName} &middot; {party.memberUids.length} member
+              {party.memberUids.length !== 1 ? "s" : ""}
+            </p>
           </div>
-          <p className="text-sm text-gray-500">
-            {party.tournamentName} &middot; {party.memberUids.length} member
-            {party.memberUids.length !== 1 ? "s" : ""}
-          </p>
+          <div className="flex items-center gap-3 self-end sm:self-auto">
+            {isCreator && (
+              confirmDelete ? (
+                <div className="flex items-center gap-2" onClick={(e) => e.preventDefault()}>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {deleting ? "..." : "Confirm"}
+                  </button>
+                  <button
+                    onClick={handleCancelDelete}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleDelete}
+                  className="rounded-lg p-1.5 text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                  title="Delete party"
+                >
+                  🗑️
+                </button>
+              )
+            )}
+            <span className="text-lg text-gray-300 transition-colors group-hover:text-gray-500">→</span>
+          </div>
         </div>
-        <span className="self-end text-lg text-gray-300 transition-colors group-hover:text-gray-500 sm:self-auto">→</span>
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 }
 
@@ -57,14 +119,21 @@ function DashboardContent() {
   useEffect(() => {
     if (!user) return;
     getPartiesForUser(user.uid).then((p) => {
-      // Sort newest first
       p.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setParties(p);
       setLoading(false);
     });
   }, [user]);
 
-  // Split into active (picking/locked) and past (complete) parties
+  const handleDelete = async (partyId: string) => {
+    try {
+      await deleteParty(partyId);
+      setParties((prev) => prev.filter((p) => p.id !== partyId));
+    } catch {
+      // Silently fail — user can retry
+    }
+  };
+
   const activeParties = parties.filter((p) => p.status === "picking" || p.status === "locked");
   const pastParties = parties.filter((p) => p.status === "complete");
 
@@ -77,7 +146,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
       {/* Welcome header */}
       <div className="mb-8 sm:mb-12">
         <p className="text-sm font-medium text-green-700 mb-1">Welcome back{user?.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}</p>
@@ -104,7 +173,7 @@ function DashboardContent() {
         <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-16 text-center sm:py-20">
           <div className="text-6xl mb-5">🏌️</div>
           <h2 className="text-xl font-semibold text-gray-700 mb-2">No parties yet</h2>
-          <p className="text-gray-500 mb-8 max-w-xs mx-auto leading-relaxed">
+          <p className="text-gray-500 mb-8 max-w-sm mx-auto leading-relaxed">
             Create a party to start picking golfers, or join one with an invite code.
           </p>
           <Link
@@ -128,7 +197,12 @@ function DashboardContent() {
             ) : (
               <div className="space-y-3">
                 {activeParties.map((party) => (
-                  <PartyCard key={party.id} party={party} />
+                  <PartyCard
+                    key={party.id}
+                    party={party}
+                    isCreator={party.createdBy === user?.uid}
+                    onDelete={handleDelete}
+                  />
                 ))}
               </div>
             )}
@@ -142,7 +216,12 @@ function DashboardContent() {
               </h2>
               <div className="space-y-3">
                 {pastParties.map((party) => (
-                  <PartyCard key={party.id} party={party} />
+                  <PartyCard
+                    key={party.id}
+                    party={party}
+                    isCreator={party.createdBy === user?.uid}
+                    onDelete={handleDelete}
+                  />
                 ))}
               </div>
             </section>
