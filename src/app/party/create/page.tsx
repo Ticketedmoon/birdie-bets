@@ -29,6 +29,7 @@ function CreatePartyContent() {
   const [defaultGroups, setDefaultGroups] = useState<Record<string, Player[]>>({ A: [], B: [], C: [], D: [] });
   const [defaultWildcards, setDefaultWildcards] = useState<Player[]>([]);
   const [fieldAvailable, setFieldAvailable] = useState(false);
+  const [checkingField, setCheckingField] = useState(false);
   const [customGroups, setCustomGroups] = useState<Record<string, Player[]> | null>(null);
   const [groupsConfirmed, setGroupsConfirmed] = useState(false);
 
@@ -41,6 +42,22 @@ function CreatePartyContent() {
       .catch(() => setError("Failed to load tournaments"))
       .finally(() => setLoadingTournaments(false));
   }, []);
+
+  // Check field availability when tournament changes
+  useEffect(() => {
+    if (!selectedTournament) return;
+    setCheckingField(true);
+    setFieldAvailable(false);
+    setShowGroupEditor(false);
+    setGroupsConfirmed(false);
+    setCustomGroups(null);
+    fetchDynamicGroups(selectedTournament)
+      .then((data) => {
+        setFieldAvailable(data.fieldAvailable);
+      })
+      .catch(() => setFieldAvailable(false))
+      .finally(() => setCheckingField(false));
+  }, [selectedTournament]);
 
   const handleLoadGroups = async () => {
     if (!selectedTournament) return;
@@ -187,6 +204,20 @@ function CreatePartyContent() {
               })}
             </select>
           )}
+          {checkingField && (
+            <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+              <span className="animate-spin inline-block h-3 w-3 border-t border-b border-green-600 rounded-full"></span>
+              Checking if the tournament field has been announced...
+            </p>
+          )}
+          {!checkingField && selectedTournament && !fieldAvailable && (
+            <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              ⏳ The player field hasn&apos;t been announced yet for this tournament. You can create a party once the field is confirmed (usually 1–2 days before the event).
+            </div>
+          )}
+          {!checkingField && selectedTournament && fieldAvailable && (
+            <p className="text-xs text-green-600 mt-2">✅ Tournament field confirmed — ready to create!</p>
+          )}
         </div>
 
         {/* Buy-in */}
@@ -279,7 +310,7 @@ function CreatePartyContent() {
             <button
               type="button"
               onClick={handleLoadGroups}
-              disabled={loadingGroups || !selectedTournament}
+              disabled={loadingGroups || !selectedTournament || !fieldAvailable}
               className="w-full rounded-lg border-2 border-dashed border-gray-300 bg-white py-4 text-sm font-medium text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-all disabled:opacity-50"
             >
               {loadingGroups ? "Loading players..." : "⚙️ Customise Player Groups (optional)"}
@@ -339,7 +370,7 @@ function CreatePartyContent() {
 
         <button
           type="submit"
-          disabled={loading || !name.trim() || !selectedTournament}
+          disabled={loading || !name.trim() || !selectedTournament || !fieldAvailable}
           className="w-full bg-green-700 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Creating..." : "Create Party"}
