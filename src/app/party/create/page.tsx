@@ -212,7 +212,7 @@ function CreatePartyContent() {
           )}
           {!checkingField && selectedTournament && !fieldAvailable && (
             <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              ⏳ The player field hasn&apos;t been announced yet for this tournament. You can create a party once the field is confirmed (usually 1–2 days before the event).
+              ⏳ The tournament field hasn&apos;t been confirmed on ESPN yet (usually 1–2 days before). You can still create the party — all top-200 ranked players will be shown. Groups will automatically filter to the confirmed field once it&apos;s published.
             </div>
           )}
           {!checkingField && selectedTournament && fieldAvailable && (
@@ -310,7 +310,7 @@ function CreatePartyContent() {
             <button
               type="button"
               onClick={handleLoadGroups}
-              disabled={loadingGroups || !selectedTournament || !fieldAvailable}
+              disabled={loadingGroups || !selectedTournament}
               className="w-full rounded-lg border-2 border-dashed border-gray-300 bg-white py-4 text-sm font-medium text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-all disabled:opacity-50"
             >
               {loadingGroups ? "Loading players..." : "⚙️ Customise Player Groups (optional)"}
@@ -370,7 +370,7 @@ function CreatePartyContent() {
 
         <button
           type="submit"
-          disabled={loading || !name.trim() || !selectedTournament || !fieldAvailable}
+          disabled={loading || !name.trim() || !selectedTournament}
           className="w-full bg-green-700 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? "Creating..." : "Create Party"}
