@@ -146,7 +146,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="mx-auto px-6 py-8 sm:px-8 sm:py-12" style={{ maxWidth: "1400px" }}>
+    <div className="w-full px-6 py-8 sm:px-12 sm:py-12 lg:px-20">
       {/* Welcome header */}
       <div className="mb-8 sm:mb-12">
         <p className="text-sm font-medium text-green-700 mb-1">Welcome back{user?.displayName ? `, ${user.displayName.split(" ")[0]}` : ""}</p>
