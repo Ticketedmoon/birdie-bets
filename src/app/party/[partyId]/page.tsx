@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { getParty, getAllPicksForParty, getUsersInfo, addInvites } from "@/lib/firestore";
 import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
+import { calculatePayouts } from "@/lib/payouts";
 import Link from "next/link";
 import { Suspense } from "react";
 import type { Party, Picks, PlayerScore, LeaderboardEntry } from "@/types";
@@ -272,26 +273,32 @@ function PartyContent() {
             {party.tournamentName} • {party.memberUids.length} member
             {party.memberUids.length !== 1 ? "s" : ""}
           </p>
-          {party.buyIn > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-                💰 €{party.buyIn} buy-in
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-800">
-                🏆 1st: €{party.secondPlacePayout
-                  ? (party.buyIn * party.memberUids.length) - (party.buyIn * 2)
-                  : party.buyIn * party.memberUids.length}
-              </span>
-              {party.secondPlacePayout && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
-                  🥈 2nd: €{party.buyIn * 2}
+          {party.buyIn > 0 && (() => {
+            const payouts = calculatePayouts(party);
+            return (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                  💰 €{party.buyIn} buy-in
                 </span>
-              )}
-              <span className="text-xs text-gray-400">
-                Pot: €{party.buyIn * party.memberUids.length}
-              </span>
-            </div>
-          )}
+                <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-800">
+                  🏆 1st: €{payouts.first}
+                </span>
+                {party.secondPlacePayout && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+                    🥈 2nd: €{payouts.second}
+                  </span>
+                )}
+                {party.thirdPlacePayout && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-700">
+                    🥉 3rd: €{payouts.third}
+                  </span>
+                )}
+                <span className="text-xs text-gray-400">
+                  Pot: €{payouts.totalPot}
+                </span>
+              </div>
+            );
+          })()}
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
           <button
@@ -372,11 +379,59 @@ function PartyContent() {
         </div>
       )}
 
-      {isLocked && (
+      {isLocked && party.status === "locked" && (
         <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6 text-sm">
-          🔒 Picks are locked — the tournament has started.
+          🔒 Picks are locked — the tournament is in progress.
         </div>
       )}
+
+      {party.status === "complete" && leaderboard.length > 0 && party.buyIn > 0 && (() => {
+        const payouts = calculatePayouts(party);
+        const winner = leaderboard[0];
+        const second = leaderboard[1];
+        const third = leaderboard[2];
+        return (
+          <div className="mb-6 rounded-xl border-2 border-emerald-300 bg-gradient-to-r from-emerald-50 to-yellow-50 p-5">
+            <h2 className="text-lg font-bold text-emerald-900 mb-3">🏆 Tournament Complete!</h2>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🥇</span>
+                <div>
+                  <span className="font-semibold text-gray-900">{winner.userName}</span>
+                  <span className="text-gray-500 text-sm ml-2">({winner.displayTotal})</span>
+                </div>
+                <span className="ml-auto rounded-full bg-emerald-200 px-3 py-1 text-sm font-bold text-emerald-900">
+                  Wins €{payouts.first}
+                </span>
+              </div>
+              {party.secondPlacePayout && second && (
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🥈</span>
+                  <div>
+                    <span className="font-semibold text-gray-900">{second.userName}</span>
+                    <span className="text-gray-500 text-sm ml-2">({second.displayTotal})</span>
+                  </div>
+                  <span className="ml-auto rounded-full bg-gray-200 px-3 py-1 text-sm font-bold text-gray-700">
+                    Wins €{payouts.second}
+                  </span>
+                </div>
+              )}
+              {party.thirdPlacePayout && third && (
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">🥉</span>
+                  <div>
+                    <span className="font-semibold text-gray-900">{third.userName}</span>
+                    <span className="text-gray-500 text-sm ml-2">({third.displayTotal})</span>
+                  </div>
+                  <span className="ml-auto rounded-full bg-orange-100 px-3 py-1 text-sm font-bold text-orange-700">
+                    Gets €{payouts.third} back
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {!picksRevealed && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mb-6 text-sm">
@@ -418,7 +473,7 @@ function PartyContent() {
                   }`}
                 >
                   <td className="px-2 py-2 text-sm font-bold text-gray-500 sm:px-4 sm:py-3">
-                    {idx === 0 ? "🏆" : idx === 1 && party.secondPlacePayout ? "🥈" : idx + 1}
+                    {idx === 0 ? "🏆" : idx === 1 && party.secondPlacePayout ? "🥈" : idx === 2 && party.thirdPlacePayout ? "🥉" : idx + 1}
                   </td>
                   <td className="px-2 py-2 sm:px-4 sm:py-3">
                     <div className="flex min-w-0 items-center gap-2">
@@ -436,16 +491,22 @@ function PartyContent() {
                           <span className="text-green-600 text-xs ml-1">(you)</span>
                         )}
                       </span>
-                      {picksRevealed && party.buyIn > 0 && idx === 0 && (
-                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          +€{party.secondPlacePayout
-                            ? (party.buyIn * party.memberUids.length) - (party.buyIn * 2)
-                            : party.buyIn * party.memberUids.length}
-                        </span>
-                      )}
+                      {picksRevealed && party.buyIn > 0 && idx === 0 && (() => {
+                        const p = calculatePayouts(party);
+                        return (
+                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            +€{p.first}
+                          </span>
+                        );
+                      })()}
                       {picksRevealed && party.buyIn > 0 && idx === 1 && party.secondPlacePayout && (
                         <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">
-                          +€{party.buyIn * 2}
+                          +€{calculatePayouts(party).second}
+                        </span>
+                      )}
+                      {picksRevealed && party.buyIn > 0 && idx === 2 && party.thirdPlacePayout && (
+                        <span className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-600">
+                          +€{calculatePayouts(party).third}
                         </span>
                       )}
                       {!showPicks && (

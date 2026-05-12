@@ -7,7 +7,8 @@ import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { createParty, addInvites } from "@/lib/firestore";
 import { fetchCurrentTournaments } from "@/lib/espn";
-import type { Tournament } from "@/types";
+import { calculatePayouts } from "@/lib/payouts";
+import type { Tournament, Party } from "@/types";
 
 function CreatePartyContent() {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ function CreatePartyContent() {
   const [emails, setEmails] = useState("");
   const [buyIn, setBuyIn] = useState(10);
   const [secondPlacePayout, setSecondPlacePayout] = useState(false);
+  const [thirdPlacePayout, setThirdPlacePayout] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingTournaments, setLoadingTournaments] = useState(true);
   const [error, setError] = useState("");
@@ -51,7 +53,8 @@ function CreatePartyContent() {
         tournament.startDate,
         buyIn,
         "EUR",
-        secondPlacePayout
+        secondPlacePayout,
+        thirdPlacePayout
       );
 
       // Add email invites to Firestore + send actual emails
@@ -170,24 +173,64 @@ function CreatePartyContent() {
         </div>
 
         {/* 2nd Place Payout */}
-        <div>
+        <div className="space-y-3">
           <label className="flex items-start gap-3 cursor-pointer">
             <input
               type="checkbox"
               checked={secondPlacePayout}
-              onChange={(e) => setSecondPlacePayout(e.target.checked)}
+              onChange={(e) => {
+                setSecondPlacePayout(e.target.checked);
+                if (!e.target.checked) setThirdPlacePayout(false);
+              }}
               className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
             />
             <div>
               <span className="text-sm font-medium text-gray-700">
-                2nd place gets a payout
+                🥈 2nd place gets a payout
               </span>
               <p className="text-xs text-gray-400 mt-0.5">
-                2nd place gets their buy-in back + one other person&apos;s (€{buyIn * 2}).
-                1st place gets the remainder of the pot.
+                Gets their buy-in back + one other person&apos;s (€{buyIn * 2})
               </p>
             </div>
           </label>
+
+          {secondPlacePayout && (
+            <label className="flex items-start gap-3 cursor-pointer ml-7">
+              <input
+                type="checkbox"
+                checked={thirdPlacePayout}
+                onChange={(e) => setThirdPlacePayout(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700">
+                  🥉 3rd place gets money back
+                </span>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Gets their buy-in refunded (€{buyIn})
+                </p>
+              </div>
+            </label>
+          )}
+
+          {/* Payout preview */}
+          {(() => {
+            const preview = calculatePayouts({
+              buyIn, currency: "EUR", secondPlacePayout, thirdPlacePayout,
+              memberUids: ["1","2","3","4","5"],
+            } as Party);
+            return (
+              <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-xs text-gray-600">
+                <p className="font-medium text-gray-700 mb-1">Payout preview (5 players):</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <span>🏆 1st: <strong className="text-emerald-700">€{preview.first}</strong></span>
+                  {secondPlacePayout && <span>🥈 2nd: <strong>€{preview.second}</strong></span>}
+                  {thirdPlacePayout && <span>🥉 3rd: <strong>€{preview.third}</strong></span>}
+                  <span className="text-gray-400">Pot: €{preview.totalPot}</span>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div>

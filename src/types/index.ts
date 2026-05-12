@@ -61,6 +61,7 @@ export interface Party {
   buyIn: number; // e.g. 10, 20, 30
   currency: string; // e.g. "EUR"
   secondPlacePayout: boolean; // if true, 2nd gets buyIn × 2
+  thirdPlacePayout: boolean; // if true, 3rd gets their buyIn back
 }
 
 export interface PartyInvite {
