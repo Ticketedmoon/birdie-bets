@@ -8,13 +8,23 @@ import type { Party } from "@/types";
  *
  * Transitions:
  *   picking → locked   (when tournament starts: ESPN status "in")
- *   picking → locked   (when tournament ends: ESPN status "post" — skip straight to locked)
+ *   picking → complete (when tournament ends: ESPN status "post")
  *   locked  → complete (when tournament ends: ESPN status "post")
+ *
+ * Grace period: parties created less than 10 minutes ago won't auto-lock,
+ * giving users time to submit picks (also useful for testing with past tournaments).
  *
  * Returns the updated party object.
  */
 export async function syncPartyStatus(party: Party): Promise<Party> {
   const espnStatus = await fetchTournamentStatus(party.tournamentId);
+
+  // Grace period: don't auto-lock brand new parties (< 10 min old)
+  const ageMs = Date.now() - new Date(party.createdAt).getTime();
+  const GRACE_PERIOD_MS = 10 * 60 * 1000; // 10 minutes
+  if (party.status === "picking" && ageMs < GRACE_PERIOD_MS) {
+    return party;
+  }
 
   let newStatus: Party["status"] | null = null;
 
