@@ -61,15 +61,16 @@ export async function fetchCurrentTournaments(): Promise<Tournament[]> {
     eventMap.set(event.id, event);
   }
 
-  // Filter out past tournaments (only keep ongoing or future)
-  const tournaments = Array.from(eventMap.values())
-    .map(mapESPNEventToTournament)
-    .filter((t) => t.status === "in" || t.status === "pre");
+  // Include all tournaments — past tournaments at the end for testing
+  const tournaments = Array.from(eventMap.values()).map(mapESPNEventToTournament);
 
-  // Sort by start date — earliest first
-  tournaments.sort((a, b) =>
-    new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-  );
+  // Sort: live first, then upcoming, then past
+  tournaments.sort((a, b) => {
+    const order = { in: 0, pre: 1, post: 2 };
+    const diff = (order[a.status] ?? 3) - (order[b.status] ?? 3);
+    if (diff !== 0) return diff;
+    return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+  });
   return tournaments;
 }
 
