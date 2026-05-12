@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { getParty, getAllPicksForParty, getUsersInfo } from "@/lib/firestore";
+import { getParty, getAllPicksForParty, getUsersInfo, addInvites } from "@/lib/firestore";
 import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
 import Link from "next/link";
@@ -25,6 +25,10 @@ function PartyContent() {
   const [emailBanner, setEmailBanner] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [inviteEmails, setInviteEmails] = useState("");
+  const [inviteSending, setInviteSending] = useState(false);
+  const [inviteResult, setInviteResult] = useState<string | null>(null);
 
   const AUTO_REFRESH_SECONDS = 300; // 5 minutes
 
@@ -194,6 +198,48 @@ function PartyContent() {
     setTimeout(() => setInviteCopied(false), 2000);
   };
 
+  const handleInviteMore = async () => {
+    if (!party || !user || !inviteEmails.trim()) return;
+    setInviteSending(true);
+    setInviteResult(null);
+
+    const emailList = inviteEmails
+      .split(/[,\n]/)
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0);
+
+    if (emailList.length === 0) {
+      setInviteSending(false);
+      return;
+    }
+
+    try {
+      await addInvites(party.id, emailList, user.uid);
+
+      // Send emails
+      const emailRes = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          emails: emailList,
+          partyName: party.name,
+          inviteCode: party.inviteCode,
+          invitedBy: user.displayName || user.email || "Someone",
+        }),
+      });
+      const emailData = await emailRes.json();
+      setInviteResult(`✓ ${emailData.sent || emailList.length} invite(s) sent!`);
+      setInviteEmails("");
+      setTimeout(() => {
+        setInviteResult(null);
+        setShowInviteForm(false);
+      }, 3000);
+    } catch {
+      setInviteResult("Failed to send invites — but invite code still works.");
+    }
+    setInviteSending(false);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-12">
@@ -234,6 +280,12 @@ function PartyContent() {
           >
             {inviteCopied ? "✓ Copied!" : `📋 Invite Code: ${party.inviteCode}`}
           </button>
+          <button
+            onClick={() => setShowInviteForm(!showInviteForm)}
+            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto"
+          >
+            {showInviteForm ? "✕ Close" : "➕ Invite More"}
+          </button>
           {!isLocked && !userHasPicks && (
             <Link
               href={`/party/${party.id}/picks`}
@@ -259,6 +311,33 @@ function PartyContent() {
           </button>
         </div>
       </div>
+
+      {showInviteForm && (
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-3">Invite more people</h3>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <textarea
+              value={inviteEmails}
+              onChange={(e) => setInviteEmails(e.target.value)}
+              placeholder="Enter email addresses, separated by commas or new lines"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              rows={2}
+            />
+            <button
+              onClick={handleInviteMore}
+              disabled={inviteSending || !inviteEmails.trim()}
+              className="shrink-0 bg-green-700 hover:bg-green-600 text-white text-sm font-medium py-2 px-5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {inviteSending ? "Sending..." : "Send Invites"}
+            </button>
+          </div>
+          {inviteResult && (
+            <p className={`text-sm mt-2 ${inviteResult.startsWith("✓") ? "text-green-600" : "text-red-600"}`}>
+              {inviteResult}
+            </p>
+          )}
+        </div>
+      )}
 
       {lastRefreshed && (
         <p className="text-xs text-gray-400 mb-4">
