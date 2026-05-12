@@ -92,7 +92,7 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
           <div className="flex gap-2">
             {GROUP_NAMES.filter((g) => g !== selectedPlayer.from).map((g) => (
               <button
-                key={g}
+                type="button" key={g}
                 onClick={() => moveToGroup(selectedPlayer.player, selectedPlayer.from, g)}
                 className="rounded bg-white border border-gray-300 px-3 py-1 text-xs font-medium hover:bg-gray-50"
               >
@@ -101,14 +101,14 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
             ))}
             {selectedPlayer.from !== "pool" && (
               <button
-                onClick={() => moveToGroup(selectedPlayer.player, selectedPlayer.from, "pool")}
+                type="button" onClick={() => moveToGroup(selectedPlayer.player, selectedPlayer.from, "pool")}
                 className="rounded bg-gray-200 px-3 py-1 text-xs font-medium hover:bg-gray-300"
               >
                 → Wildcard
               </button>
             )}
             <button
-              onClick={() => setSelectedPlayer(null)}
+              type="button" onClick={() => setSelectedPlayer(null)}
               className="rounded px-2 py-1 text-xs text-gray-400 hover:text-gray-600"
             >
               ✕
@@ -127,7 +127,7 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
             <div className="space-y-1.5">
               {editGroups[g].map((player) => (
                 <button
-                  key={player.id}
+                  type="button" key={player.id}
                   onClick={() => handlePlayerClick(player, g)}
                   className={`w-full text-left rounded-md border px-3 py-1.5 text-sm transition-all ${
                     selectedPlayer?.player.id === player.id
@@ -164,7 +164,7 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto">
           {filteredPool.map((player) => (
             <button
-              key={player.id}
+              type="button" key={player.id}
               onClick={() => handlePlayerClick(player, "pool")}
               className={`text-left rounded-md border px-2 py-1.5 text-xs transition-all ${
                 selectedPlayer?.player.id === player.id
@@ -179,7 +179,7 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
       </div>
 
       <button
-        onClick={() => onSave(editGroups)}
+        type="button" onClick={() => onSave(editGroups)}
         className="mt-4 w-full rounded-lg bg-green-700 py-2.5 text-sm font-medium text-white hover:bg-green-600 transition-colors"
       >
         ✓ Confirm Groups
