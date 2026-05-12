@@ -58,6 +58,9 @@ export interface Party {
   createdAt: string;
   status: "picking" | "locked" | "complete";
   memberUids: string[];
+  buyIn: number; // e.g. 10, 20, 30
+  currency: string; // e.g. "EUR"
+  secondPlacePayout: boolean; // if true, 2nd gets buyIn × 2
 }
 
 export interface PartyInvite {

@@ -33,7 +33,10 @@ export async function createParty(
   createdBy: string,
   tournamentId: string,
   tournamentName: string,
-  tournamentStartDate: string
+  tournamentStartDate: string,
+  buyIn: number = 10,
+  currency: string = "EUR",
+  secondPlacePayout: boolean = false
 ): Promise<Party> {
   const partyRef = doc(collection(db(), "parties"));
   const party: Omit<Party, "id"> = {
@@ -46,6 +49,9 @@ export async function createParty(
     createdAt: new Date().toISOString(),
     status: "picking",
     memberUids: [createdBy],
+    buyIn,
+    currency,
+    secondPlacePayout,
   };
   await setDoc(partyRef, party);
   return { id: partyRef.id, ...party };

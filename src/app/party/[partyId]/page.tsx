@@ -272,6 +272,26 @@ function PartyContent() {
             {party.tournamentName} • {party.memberUids.length} member
             {party.memberUids.length !== 1 ? "s" : ""}
           </p>
+          {party.buyIn > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                💰 €{party.buyIn} buy-in
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-semibold text-yellow-800">
+                🏆 1st: €{party.secondPlacePayout
+                  ? (party.buyIn * party.memberUids.length) - (party.buyIn * 2)
+                  : party.buyIn * party.memberUids.length}
+              </span>
+              {party.secondPlacePayout && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+                  🥈 2nd: €{party.buyIn * 2}
+                </span>
+              )}
+              <span className="text-xs text-gray-400">
+                Pot: €{party.buyIn * party.memberUids.length}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
           <button
@@ -397,7 +417,9 @@ function PartyContent() {
                     isOwnRow ? "bg-green-50" : idx % 2 === 0 ? "bg-white" : "bg-gray-50"
                   }`}
                 >
-                  <td className="px-2 py-2 text-sm font-bold text-gray-500 sm:px-4 sm:py-3">{idx + 1}</td>
+                  <td className="px-2 py-2 text-sm font-bold text-gray-500 sm:px-4 sm:py-3">
+                    {idx === 0 ? "🏆" : idx === 1 && party.secondPlacePayout ? "🥈" : idx + 1}
+                  </td>
                   <td className="px-2 py-2 sm:px-4 sm:py-3">
                     <div className="flex min-w-0 items-center gap-2">
                       {entry.userPhotoURL && (
@@ -414,6 +436,18 @@ function PartyContent() {
                           <span className="text-green-600 text-xs ml-1">(you)</span>
                         )}
                       </span>
+                      {picksRevealed && party.buyIn > 0 && idx === 0 && (
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                          +€{party.secondPlacePayout
+                            ? (party.buyIn * party.memberUids.length) - (party.buyIn * 2)
+                            : party.buyIn * party.memberUids.length}
+                        </span>
+                      )}
+                      {picksRevealed && party.buyIn > 0 && idx === 1 && party.secondPlacePayout && (
+                        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">
+                          +€{party.buyIn * 2}
+                        </span>
+                      )}
                       {!showPicks && (
                         <span className={`ml-1 whitespace-nowrap text-xs ${hasSubmitted ? "text-green-600" : "text-gray-400"}`}>
                           {hasSubmitted ? "✓ Picks submitted" : "Waiting..."}

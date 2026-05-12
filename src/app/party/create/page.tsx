@@ -16,6 +16,8 @@ function CreatePartyContent() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [selectedTournament, setSelectedTournament] = useState("");
   const [emails, setEmails] = useState("");
+  const [buyIn, setBuyIn] = useState(10);
+  const [secondPlacePayout, setSecondPlacePayout] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingTournaments, setLoadingTournaments] = useState(true);
   const [error, setError] = useState("");
@@ -46,7 +48,10 @@ function CreatePartyContent() {
         user.uid,
         tournament.id,
         tournament.name,
-        tournament.startDate
+        tournament.startDate,
+        buyIn,
+        "EUR",
+        secondPlacePayout
       );
 
       // Add email invites to Firestore + send actual emails
@@ -139,6 +144,50 @@ function CreatePartyContent() {
               })}
             </select>
           )}
+        </div>
+
+        {/* Buy-in */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Buy-in Amount
+          </label>
+          <div className="flex gap-3">
+            {[10, 20, 30].map((amount) => (
+              <button
+                key={amount}
+                type="button"
+                onClick={() => setBuyIn(amount)}
+                className={`flex-1 py-3 rounded-lg border-2 text-center font-semibold transition-all ${
+                  buyIn === amount
+                    ? "border-green-600 bg-green-50 text-green-800 ring-2 ring-green-200"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                €{amount}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 2nd Place Payout */}
+        <div>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={secondPlacePayout}
+              onChange={(e) => setSecondPlacePayout(e.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-700">
+                2nd place gets a payout
+              </span>
+              <p className="text-xs text-gray-400 mt-0.5">
+                2nd place gets their buy-in back + one other person&apos;s (€{buyIn * 2}).
+                1st place gets the remainder of the pot.
+              </p>
+            </div>
+          </label>
         </div>
 
         <div>
