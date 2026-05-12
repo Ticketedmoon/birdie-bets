@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const OWGR_API = "https://apiweb.owgr.com/api/owgr/rankings/getRankings";
+const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/golf";
 
 interface OWGREntry {
   rank: number;
@@ -14,22 +15,60 @@ interface OWGREntry {
   };
 }
 
-// In-memory cache (server-side)
-let cache: { data: unknown; fetchedAt: number } | null = null;
-const CACHE_TTL = 1000 * 60 * 60; // 1 hour
+interface OWGRPlayer {
+  id: string;
+  displayName: string;
+  shortName: string;
+  lastName: string;
+  amateur: boolean;
+  country: string;
+  rank: number;
+}
 
-export async function GET() {
+// Cache per tournament (keyed by eventId)
+const cacheMap = new Map<string, { data: unknown; fetchedAt: number }>();
+const CACHE_TTL = 1000 * 60 * 30; // 30 minutes
+
+/**
+ * Fetch tournament field from ESPN. Returns a Set of lowercase player names.
+ * Returns null if field is not yet available (future tournaments).
+ */
+async function fetchTournamentField(eventId: string): Promise<Set<string> | null> {
+  try {
+    const res = await fetch(`${ESPN_BASE}/leaderboard?event=${eventId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const competitors = data.events?.[0]?.competitions?.[0]?.competitors || [];
+    if (competitors.length === 0) return null;
+    return new Set(competitors.map((c: { athlete: { displayName: string } }) =>
+      c.athlete.displayName.toLowerCase()
+    ));
+  } catch {
+    return null;
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const eventId = request.nextUrl.searchParams.get("eventId") || "";
+  const cacheKey = eventId || "_all";
+
   // Return cache if fresh
-  if (cache && Date.now() - cache.fetchedAt < CACHE_TTL) {
-    return NextResponse.json(cache.data);
+  const cached = cacheMap.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+    return NextResponse.json(cached.data);
   }
 
   try {
-    const res = await fetch(`${OWGR_API}?pageSize=200&pageNumber=1`);
-    if (!res.ok) throw new Error(`OWGR API error: ${res.status}`);
-    const raw = await res.json();
+    // Fetch OWGR rankings and tournament field in parallel
+    const [owgrRes, field] = await Promise.all([
+      fetch(`${OWGR_API}?pageSize=200&pageNumber=1`),
+      eventId ? fetchTournamentField(eventId) : Promise.resolve(null),
+    ]);
 
-    const players = (raw.rankingsList || []).map((entry: OWGREntry) => ({
+    if (!owgrRes.ok) throw new Error(`OWGR API error: ${owgrRes.status}`);
+    const raw = await owgrRes.json();
+
+    let players: OWGRPlayer[] = (raw.rankingsList || []).map((entry: OWGREntry) => ({
       id: `owgr_${entry.player.id}`,
       displayName: entry.player.fullName,
       shortName: `${entry.player.firstName[0]}. ${entry.player.lastName}`,
@@ -39,6 +78,13 @@ export async function GET() {
       rank: entry.rank,
     }));
 
+    // If we have a tournament field, filter to only players in the field
+    const fieldAvailable = field !== null && field.size > 0;
+    if (fieldAvailable) {
+      players = players.filter((p) => field.has(p.displayName.toLowerCase()));
+    }
+
+    // Build groups from the filtered list (first 6 = A, next 6 = B, etc.)
     const result = {
       groups: {
         A: players.slice(0, 6),
@@ -47,10 +93,11 @@ export async function GET() {
         D: players.slice(18, 24),
       },
       wildcards: players.slice(24),
+      fieldAvailable,
       fetchedAt: new Date().toISOString(),
     };
 
-    cache = { data: result, fetchedAt: Date.now() };
+    cacheMap.set(cacheKey, { data: result, fetchedAt: Date.now() });
     return NextResponse.json(result);
   } catch (error) {
     console.error("OWGR fetch error:", error);

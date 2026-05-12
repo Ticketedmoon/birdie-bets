@@ -27,6 +27,7 @@ function PicksContent() {
   });
   const [playerGroups, setPlayerGroups] = useState<GroupedPlayers>({ A: [], B: [], C: [], D: [] });
   const [wildcardPlayers, setWildcardPlayers] = useState<Player[]>([]);
+  const [fieldAvailable, setFieldAvailable] = useState(false);
   const [wildcardSearch, setWildcardSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,10 +39,9 @@ function PicksContent() {
 
     const load = async () => {
       try {
-        const [partyData, existingPicks, dynamicData] = await Promise.all([
+        const [partyData, existingPicks] = await Promise.all([
           getParty(partyId),
           getPicks(partyId, user.uid),
-          fetchDynamicGroups(),
         ]);
 
         if (!partyData) {
@@ -50,12 +50,16 @@ function PicksContent() {
           return;
         }
 
+        // Fetch groups filtered by tournament field
+        const dynamicData = await fetchDynamicGroups(partyData.tournamentId);
+
         // Auto-sync party status with live ESPN tournament status
         const synced = await syncPartyStatus(partyData);
         setParty(synced);
         if (existingPicks) setPicks(existingPicks);
         setPlayerGroups(dynamicData.groups);
         setWildcardPlayers(dynamicData.wildcards);
+        setFieldAvailable(dynamicData.fieldAvailable);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load");
       }
@@ -167,7 +171,9 @@ function PicksContent() {
           {party?.tournamentName} — Select 1 player from each group + 2 wildcards
         </p>
         <p className="mt-1 text-xs text-gray-400 sm:text-sm">
-          Groups based on live Official World Golf Ranking
+          {fieldAvailable
+            ? "✅ Groups filtered to confirmed tournament field (ranked by OWGR)"
+            : "⏳ Field not yet announced — showing all ranked players"}
         </p>
       </div>
 

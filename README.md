@@ -174,6 +174,7 @@ All major design decisions are documented as ADRs:
 | [012](docs/adr/012-tournament-auto-lock.md) | Auto-lock parties when tournament starts |
 | [013](docs/adr/013-hosting-vercel.md) | Vercel serverless hosting |
 | [014](docs/adr/014-player-id-matching.md) | Player ID matching — name-based fallback |
+| [015](docs/adr/015-field-filtered-groups.md) | Tournament field-filtered player groups |
 
 ---
 

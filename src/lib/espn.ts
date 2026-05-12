@@ -152,17 +152,20 @@ export async function fetchPlayersFromLeaderboard(eventId: string): Promise<Play
  * Group A = rank 1-6, B = 7-12, C = 13-18, D = 19-24.
  * Wildcards = rank 25+.
  */
-export async function fetchDynamicGroups(): Promise<{
+export async function fetchDynamicGroups(eventId?: string): Promise<{
   groups: GroupedPlayers;
   wildcards: Player[];
+  fieldAvailable: boolean;
 }> {
   try {
-    const res = await fetch("/api/rankings");
+    const url = eventId ? `/api/rankings?eventId=${eventId}` : "/api/rankings";
+    const res = await fetch(url);
     if (!res.ok) throw new Error("Rankings API error");
     const data = await res.json();
     return {
       groups: data.groups,
       wildcards: data.wildcards,
+      fieldAvailable: data.fieldAvailable ?? false,
     };
   } catch {
     // Fallback to hardcoded groups from playerGroups.ts
@@ -172,6 +175,7 @@ export async function fetchDynamicGroups(): Promise<{
     return {
       groups: PLAYER_GROUPS,
       wildcards: recentPlayers.filter((p) => !groupedIds.has(p.id)),
+      fieldAvailable: false,
     };
   }
 }
