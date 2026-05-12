@@ -9,7 +9,7 @@ import { getParty, savePicks, getPicks } from "@/lib/firestore";
 import { fetchDynamicGroups } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
 import { GROUP_LABELS } from "@/lib/playerGroups";
-import type { Party, Player, Picks, PlayerPick, PlayerGroup, GroupedPlayers } from "@/types";
+import type { Party, Player, Picks, PlayerPick, PlayerGroup } from "@/types";
 
 function PicksContent() {
   const { partyId } = useParams<{ partyId: string }>();
@@ -25,7 +25,7 @@ function PicksContent() {
     wildcard1: null,
     wildcard2: null,
   });
-  const [playerGroups, setPlayerGroups] = useState<GroupedPlayers>({ A: [], B: [], C: [], D: [] });
+  const [playerGroups, setPlayerGroups] = useState<Record<string, Player[]>>({ A: [], B: [], C: [], D: [] });
   const [wildcardPlayers, setWildcardPlayers] = useState<Player[]>([]);
   const [fieldAvailable, setFieldAvailable] = useState(false);
   const [wildcardSearch, setWildcardSearch] = useState("");
@@ -50,16 +50,36 @@ function PicksContent() {
           return;
         }
 
-        // Fetch groups filtered by tournament field
-        const dynamicData = await fetchDynamicGroups(partyData.tournamentId);
-
         // Auto-sync party status with live ESPN tournament status
         const synced = await syncPartyStatus(partyData);
         setParty(synced);
         if (existingPicks) setPicks(existingPicks);
-        setPlayerGroups(dynamicData.groups);
-        setWildcardPlayers(dynamicData.wildcards);
-        setFieldAvailable(dynamicData.fieldAvailable);
+
+        // Use custom groups from party if set, otherwise fetch from OWGR
+        if (synced.customGroups) {
+          setPlayerGroups({
+            A: synced.customGroups.A.map((p) => ({ ...p, shortName: p.displayName, lastName: p.displayName.split(" ").pop() || "", amateur: false })),
+            B: synced.customGroups.B.map((p) => ({ ...p, shortName: p.displayName, lastName: p.displayName.split(" ").pop() || "", amateur: false })),
+            C: synced.customGroups.C.map((p) => ({ ...p, shortName: p.displayName, lastName: p.displayName.split(" ").pop() || "", amateur: false })),
+            D: synced.customGroups.D.map((p) => ({ ...p, shortName: p.displayName, lastName: p.displayName.split(" ").pop() || "", amateur: false })),
+          });
+          // Wildcards: fetch all ranked players, exclude those in custom groups
+          const dynamicData = await fetchDynamicGroups(synced.tournamentId);
+          const groupedIds = new Set([
+            ...synced.customGroups.A.map((p) => p.id),
+            ...synced.customGroups.B.map((p) => p.id),
+            ...synced.customGroups.C.map((p) => p.id),
+            ...synced.customGroups.D.map((p) => p.id),
+          ]);
+          const allPlayers = [...dynamicData.groups.A, ...dynamicData.groups.B, ...dynamicData.groups.C, ...dynamicData.groups.D, ...dynamicData.wildcards];
+          setWildcardPlayers(allPlayers.filter((p) => !groupedIds.has(p.id)));
+          setFieldAvailable(true);
+        } else {
+          const dynamicData = await fetchDynamicGroups(synced.tournamentId);
+          setPlayerGroups({ A: dynamicData.groups.A, B: dynamicData.groups.B, C: dynamicData.groups.C, D: dynamicData.groups.D });
+          setWildcardPlayers(dynamicData.wildcards);
+          setFieldAvailable(dynamicData.fieldAvailable);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load");
       }

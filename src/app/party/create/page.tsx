@@ -6,9 +6,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { createParty, addInvites } from "@/lib/firestore";
-import { fetchCurrentTournaments } from "@/lib/espn";
+import { fetchCurrentTournaments, fetchDynamicGroups } from "@/lib/espn";
 import { calculatePayouts } from "@/lib/payouts";
-import type { Tournament, Party } from "@/types";
+import { GroupEditor } from "@/components/GroupEditor";
+import type { Tournament, Party, Player } from "@/types";
 
 function CreatePartyContent() {
   const { user } = useAuth();
@@ -23,6 +24,13 @@ function CreatePartyContent() {
   const [loading, setLoading] = useState(false);
   const [loadingTournaments, setLoadingTournaments] = useState(true);
   const [error, setError] = useState("");
+  const [showGroupEditor, setShowGroupEditor] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [defaultGroups, setDefaultGroups] = useState<Record<string, Player[]>>({ A: [], B: [], C: [], D: [] });
+  const [defaultWildcards, setDefaultWildcards] = useState<Player[]>([]);
+  const [fieldAvailable, setFieldAvailable] = useState(false);
+  const [customGroups, setCustomGroups] = useState<Record<string, Player[]> | null>(null);
+  const [groupsConfirmed, setGroupsConfirmed] = useState(false);
 
   useEffect(() => {
     fetchCurrentTournaments()
@@ -33,6 +41,27 @@ function CreatePartyContent() {
       .catch(() => setError("Failed to load tournaments"))
       .finally(() => setLoadingTournaments(false));
   }, []);
+
+  const handleLoadGroups = async () => {
+    if (!selectedTournament) return;
+    setLoadingGroups(true);
+    try {
+      const data = await fetchDynamicGroups(selectedTournament);
+      setDefaultGroups({ A: data.groups.A, B: data.groups.B, C: data.groups.C, D: data.groups.D });
+      setDefaultWildcards(data.wildcards);
+      setFieldAvailable(data.fieldAvailable);
+      setShowGroupEditor(true);
+    } catch {
+      setError("Failed to load player groups");
+    }
+    setLoadingGroups(false);
+  };
+
+  const handleGroupsSave = (groups: Record<string, Player[]>) => {
+    setCustomGroups(groups);
+    setGroupsConfirmed(true);
+    setShowGroupEditor(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +74,16 @@ function CreatePartyContent() {
       const tournament = tournaments.find((t) => t.id === selectedTournament);
       if (!tournament) throw new Error("Tournament not found");
 
+      // Build custom groups for Firestore (just id + displayName)
+      const groupsForFirestore = customGroups
+        ? {
+            A: customGroups.A.map((p) => ({ id: p.id, displayName: p.displayName })),
+            B: customGroups.B.map((p) => ({ id: p.id, displayName: p.displayName })),
+            C: customGroups.C.map((p) => ({ id: p.id, displayName: p.displayName })),
+            D: customGroups.D.map((p) => ({ id: p.id, displayName: p.displayName })),
+          }
+        : undefined;
+
       const party = await createParty(
         name.trim(),
         user.uid,
@@ -54,7 +93,8 @@ function CreatePartyContent() {
         buyIn,
         "EUR",
         secondPlacePayout,
-        thirdPlacePayout
+        thirdPlacePayout,
+        groupsForFirestore
       );
 
       // Add email invites to Firestore + send actual emails
@@ -231,6 +271,46 @@ function CreatePartyContent() {
               </div>
             );
           })()}
+        </div>
+
+        {/* Group Customisation */}
+        <div>
+          {!showGroupEditor && !groupsConfirmed && (
+            <button
+              type="button"
+              onClick={handleLoadGroups}
+              disabled={loadingGroups || !selectedTournament}
+              className="w-full rounded-lg border-2 border-dashed border-gray-300 bg-white py-4 text-sm font-medium text-gray-600 hover:border-gray-400 hover:bg-gray-50 transition-all disabled:opacity-50"
+            >
+              {loadingGroups ? "Loading players..." : "⚙️ Customise Player Groups (optional)"}
+            </button>
+          )}
+
+          {groupsConfirmed && !showGroupEditor && (
+            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-green-800">
+                  ✅ Custom groups set — {Object.values(customGroups!).reduce((s, g) => s + g.length, 0)} players in groups
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLoadGroups}
+                  className="text-xs text-green-700 hover:text-green-900 underline"
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showGroupEditor && (
+            <GroupEditor
+              groups={customGroups || defaultGroups}
+              wildcards={customGroups ? [] : defaultWildcards}
+              fieldAvailable={fieldAvailable}
+              onSave={handleGroupsSave}
+            />
+          )}
         </div>
 
         <div>

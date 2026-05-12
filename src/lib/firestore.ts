@@ -38,7 +38,8 @@ export async function createParty(
   buyIn: number = 10,
   currency: string = "EUR",
   secondPlacePayout: boolean = false,
-  thirdPlacePayout: boolean = false
+  thirdPlacePayout: boolean = false,
+  customGroups?: Party["customGroups"]
 ): Promise<Party> {
   const partyRef = doc(collection(db(), "parties"));
   const party: Omit<Party, "id"> = {
@@ -55,6 +56,7 @@ export async function createParty(
     currency,
     secondPlacePayout,
     thirdPlacePayout,
+    ...(customGroups ? { customGroups } : {}),
   };
   await setDoc(partyRef, party);
   return { id: partyRef.id, ...party };

@@ -1,0 +1,56 @@
+# ADR-016: Custom Player Group Assignment by Party Creator
+
+## Status
+Accepted
+
+## Date
+2026-05-12
+
+## Context
+The OWGR-based auto-grouping assigns players to Groups A–D based on world ranking. However, party creators may want to customise these groups — for example, moving a player they consider underrated into a higher group, or adjusting groups to match their friend group's knowledge of golf.
+
+## Decision
+Allow the party creator to **optionally customise player groups** during party creation.
+
+### Flow
+1. Creator selects a tournament
+2. An optional "⚙️ Customise Player Groups" button appears
+3. Clicking it loads the OWGR-suggested groups (filtered by tournament field if available)
+4. Creator can click any player → choose which group to move them to (A/B/C/D/Wildcard)
+5. Click "✓ Confirm Groups" to save
+6. Custom groups are stored in Firestore on the `party.customGroups` field
+7. All party members see the creator's custom groups when picking players
+
+### Data Model
+```typescript
+party.customGroups?: {
+  A: { id: string; displayName: string }[];
+  B: { id: string; displayName: string }[];
+  C: { id: string; displayName: string }[];
+  D: { id: string; displayName: string }[];
+}
+```
+
+### UI — Click-to-Move (not drag-and-drop)
+- Groups displayed as coloured cards (A=red, B=blue, C=yellow, D=purple)
+- Click a player → a toolbar appears with "Move to Group A/B/C/D/Wildcard" buttons
+- Wildcard pool shown below with search
+- Simple, fast, mobile-friendly
+
+### Picks Page Behaviour
+- If `party.customGroups` exists → use those groups
+- If not → fall back to OWGR-based auto-groups (filtered by tournament field)
+- Wildcards = all field players not in the custom groups
+
+## Consequences
+
+### Positive
+- Creator has full control over competitive balance
+- Simple click-to-move UI works on desktop and mobile
+- Optional — can skip and use OWGR defaults
+- Custom groups persist with the party in Firestore
+
+### Negative
+- Creator could make unfair groups (by design — it's their party)
+- Groups are set at creation time and can't be changed later (could add editing later)
+- If creator doesn't customise, the OWGR defaults are used (good fallback)

@@ -175,6 +175,7 @@ All major design decisions are documented as ADRs:
 | [013](docs/adr/013-hosting-vercel.md) | Vercel serverless hosting |
 | [014](docs/adr/014-player-id-matching.md) | Player ID matching — name-based fallback |
 | [015](docs/adr/015-field-filtered-groups.md) | Tournament field-filtered player groups |
+| [016](docs/adr/016-custom-group-assignment.md) | Custom player group assignment by party creator |
 
 ---
 
