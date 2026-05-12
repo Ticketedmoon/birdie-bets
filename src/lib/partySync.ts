@@ -19,13 +19,6 @@ import type { Party } from "@/types";
 export async function syncPartyStatus(party: Party): Promise<Party> {
   const espnStatus = await fetchTournamentStatus(party.tournamentId);
 
-  // Grace period: don't auto-lock brand new parties (< 10 min old)
-  const ageMs = Date.now() - new Date(party.createdAt).getTime();
-  const GRACE_PERIOD_MS = 10 * 60 * 1000; // 10 minutes
-  if (party.status === "picking" && ageMs < GRACE_PERIOD_MS) {
-    return party;
-  }
-
   let newStatus: Party["status"] | null = null;
 
   if (party.status === "picking" && (espnStatus === "in" || espnStatus === "post")) {
