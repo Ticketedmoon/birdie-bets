@@ -2,12 +2,15 @@
 
 **Pick your golfers. Track the tournament. Win the pot.**
 
+🌐 **Live at [birdie-bets.vercel.app](https://birdie-bets.vercel.app/)**
+
 BirdieBets is a golf tournament pool tracker where you and your friends each pick 6 PGA Tour players from skill-tiered groups, then watch the leaderboard update live as the tournament unfolds. The lowest combined score wins the pot.
 
 ![Next.js](https://img.shields.io/badge/Next.js_16-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![Firebase](https://img.shields.io/badge/Firebase-FFCA28?logo=firebase&logoColor=black)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
+![Vercel](https://img.shields.io/badge/Deployed_on-Vercel-black?logo=vercel)
 
 ---
 
@@ -163,6 +166,13 @@ All major design decisions are documented as ADRs:
 | [004](docs/adr/004-player-groups.md) | OWGR-based player tiering system |
 | [005](docs/adr/005-scoring-system.md) | Scoring rules and missed cut penalty |
 | [006](docs/adr/006-party-system.md) | Party invite system (code + email) |
+| [007](docs/adr/007-owgr-dynamic-groups.md) | Dynamic groups from live OWGR API |
+| [008](docs/adr/008-email-invites.md) | Resend for transactional email invites |
+| [009](docs/adr/009-auto-refresh-leaderboard.md) | Auto-refresh leaderboard every 5 minutes |
+| [010](docs/adr/010-hidden-picks.md) | Hidden picks until tournament starts |
+| [011](docs/adr/011-buy-in-payouts.md) | Buy-in and payout system (1st/2nd/3rd) |
+| [012](docs/adr/012-tournament-auto-lock.md) | Auto-lock parties when tournament starts |
+| [013](docs/adr/013-hosting-vercel.md) | Vercel serverless hosting |
 
 ---
 
