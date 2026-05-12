@@ -59,8 +59,17 @@ function PartyContent() {
       fetchLeaderboard(partyData.tournamentId).catch(() => [] as PlayerScore[]),
     ]);
 
-    const scoreMap = new Map<string, PlayerScore>();
-    scores.forEach((s) => scoreMap.set(s.playerId, s));
+    // Build lookup maps by both ID and normalized name (OWGR IDs don't match ESPN IDs)
+    const scoreByIdMap = new Map<string, PlayerScore>();
+    const scoreByNameMap = new Map<string, PlayerScore>();
+    scores.forEach((s) => {
+      scoreByIdMap.set(s.playerId, s);
+      scoreByNameMap.set(s.playerName.toLowerCase(), s);
+    });
+
+    const findScore = (playerId: string, playerName: string): PlayerScore | undefined => {
+      return scoreByIdMap.get(playerId) || scoreByNameMap.get(playerName.toLowerCase());
+    };
 
     const entries: LeaderboardEntry[] = partyData.memberUids.map((uid) => {
       const picks = allPicks[uid];
@@ -90,7 +99,7 @@ function PartyContent() {
           };
         }
 
-        const score = scoreMap.get(pick.playerId);
+        const score = findScore(pick.playerId, pick.playerName || "");
         if (!score) {
           return {
             group: pick.group,

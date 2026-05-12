@@ -173,6 +173,7 @@ All major design decisions are documented as ADRs:
 | [011](docs/adr/011-buy-in-payouts.md) | Buy-in and payout system (1st/2nd/3rd) |
 | [012](docs/adr/012-tournament-auto-lock.md) | Auto-lock parties when tournament starts |
 | [013](docs/adr/013-hosting-vercel.md) | Vercel serverless hosting |
+| [014](docs/adr/014-player-id-matching.md) | Player ID matching — name-based fallback |
 
 ---
 
