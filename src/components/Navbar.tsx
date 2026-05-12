@@ -10,7 +10,7 @@ export function Navbar() {
     <nav className="bg-green-800 text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 py-3 sm:h-16 sm:min-h-0 sm:flex-nowrap sm:py-0">
-          <Link href="/dashboard" className="flex min-w-0 items-center gap-2 font-bold text-base sm:text-xl">
+          <Link href="/dashboard" className="flex min-w-0 items-center gap-2 text-base font-extrabold tracking-tight sm:text-xl" style={{ fontFamily: "var(--font-heading), system-ui, sans-serif" }}>
             <span className="shrink-0">⛳</span>
             <span className="truncate">BirdieBets</span>
           </Link>
