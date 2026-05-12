@@ -23,6 +23,10 @@ function PartyContent() {
   const [error, setError] = useState("");
   const [inviteCopied, setInviteCopied] = useState(false);
   const [emailBanner, setEmailBanner] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+
+  const AUTO_REFRESH_SECONDS = 300; // 5 minutes
 
   // Show email send results from create flow
   useEffect(() => {
@@ -137,6 +141,8 @@ function PartyContent() {
         setParty(synced);
         const lb = await buildLeaderboard(synced);
         setLeaderboard(lb);
+        setLastRefreshed(new Date());
+        setCountdown(AUTO_REFRESH_SECONDS);
         setLoading(false);
       })
       .catch((err) => {
@@ -149,13 +155,36 @@ function PartyContent() {
     if (!party) return;
     setRefreshing(true);
     try {
-      const lb = await buildLeaderboard(party);
+      // Re-sync party status on every refresh
+      const synced = await syncPartyStatus(party);
+      setParty(synced);
+      const lb = await buildLeaderboard(synced);
       setLeaderboard(lb);
+      setLastRefreshed(new Date());
+      setCountdown(AUTO_REFRESH_SECONDS);
     } catch (err) {
       setError("Failed to refresh scores");
     }
     setRefreshing(false);
   };
+
+  // Auto-refresh countdown timer
+  useEffect(() => {
+    if (!party || loading) return;
+
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          // Trigger refresh
+          handleRefresh();
+          return AUTO_REFRESH_SECONDS;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [party, loading]);
 
   const handleCopyInvite = () => {
     if (!party) return;
@@ -226,10 +255,16 @@ function PartyContent() {
             disabled={refreshing}
             className="w-full rounded-lg bg-blue-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-50 sm:w-auto"
           >
-            {refreshing ? "Refreshing..." : "🔄 Refresh Scores"}
+            {refreshing ? "Refreshing..." : `🔄 Refresh (${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, "0")})`}
           </button>
         </div>
       </div>
+
+      {lastRefreshed && (
+        <p className="text-xs text-gray-400 mb-4">
+          Last updated: {lastRefreshed.toLocaleTimeString()} · Auto-refresh in {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}
+        </p>
+      )}
 
       {emailBanner && (
         <div className="mb-6 flex flex-col gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 sm:flex-row sm:items-center sm:justify-between">

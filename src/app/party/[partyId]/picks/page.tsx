@@ -119,6 +119,17 @@ function PicksContent() {
     setError("");
     setSuccess("");
     try {
+      // Re-check party status right before saving (prevents stale page saves)
+      const freshParty = await getParty(partyId);
+      if (freshParty) {
+        const synced = await syncPartyStatus(freshParty);
+        if (synced.status !== "picking") {
+          setParty(synced);
+          setError("🔒 Tournament has started — picks are locked. Your changes were not saved.");
+          setSaving(false);
+          return;
+        }
+      }
       await savePicks(partyId, user.uid, picks);
       setSuccess("Picks saved successfully!");
       setTimeout(() => router.push(`/party/${partyId}`), 1500);
