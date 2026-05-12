@@ -40,31 +40,38 @@ function mapCompetitorToPlayerScore(comp: ESPNCompetitor): PlayerScore {
 }
 
 export async function fetchCurrentTournaments(): Promise<Tournament[]> {
-  // Fetch current/recent events AND upcoming events for the rest of the season
   const now = new Date();
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   const endOfYear = new Date(now.getFullYear(), 11, 31);
   const formatDate = (d: Date) =>
     `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const dateRange = `${formatDate(now)}-${formatDate(endOfYear)}`;
 
-  const [leaderboardRes, scoreboardRes] = await Promise.all([
+  const futureRange = `${formatDate(now)}-${formatDate(endOfYear)}`;
+  const recentRange = `${formatDate(twoWeeksAgo)}-${formatDate(now)}`;
+
+  const [leaderboardRes, futureRes, recentRes] = await Promise.all([
     fetch(`${ESPN_BASE}/leaderboard`),
-    fetch(`${ESPN_BASE}/pga/scoreboard?dates=${dateRange}`),
+    fetch(`${ESPN_BASE}/pga/scoreboard?dates=${futureRange}`),
+    fetch(`${ESPN_BASE}/pga/scoreboard?dates=${recentRange}`),
   ]);
 
   const leaderboardData = leaderboardRes.ok ? await leaderboardRes.json() : { events: [] };
-  const scoreboardData = scoreboardRes.ok ? await scoreboardRes.json() : { events: [] };
+  const futureData = futureRes.ok ? await futureRes.json() : { events: [] };
+  const recentData = recentRes.ok ? await recentRes.json() : { events: [] };
 
   // Merge and deduplicate by event ID
   const eventMap = new Map<string, ESPNEvent>();
-  for (const event of [...(leaderboardData.events || []), ...(scoreboardData.events || [])]) {
+  for (const event of [
+    ...(leaderboardData.events || []),
+    ...(futureData.events || []),
+    ...(recentData.events || []),
+  ]) {
     eventMap.set(event.id, event);
   }
 
-  // Include all tournaments — past tournaments at the end for testing
   const tournaments = Array.from(eventMap.values()).map(mapESPNEventToTournament);
 
-  // Sort: live first, then upcoming, then past
+  // Sort: live first, then upcoming, then recent past
   tournaments.sort((a, b) => {
     const order = { in: 0, pre: 1, post: 2 };
     const diff = (order[a.status] ?? 3) - (order[b.status] ?? 3);
