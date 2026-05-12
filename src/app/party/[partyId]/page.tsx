@@ -339,9 +339,32 @@ function PartyContent() {
         </div>
       </div>
 
-      {showInviteForm && (
+      {showInviteForm && party && (
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">Invite more people</h3>
+
+          {/* Shareable link — primary method */}
+          <div className="mb-4 rounded-lg bg-gray-50 border border-gray-200 p-3">
+            <p className="text-xs font-medium text-gray-500 mb-2">Share this link:</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={`${typeof window !== "undefined" ? window.location.origin : ""}/party/join?code=${party.inviteCode}`}
+                className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 font-mono"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                onClick={handleCopyInvite}
+                className="shrink-0 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors"
+              >
+                {inviteCopied ? "✓ Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+
+          {/* Email invites — secondary method */}
+          <p className="text-xs font-medium text-gray-500 mb-2">Or send email invites:</p>
           <div className="flex flex-col sm:flex-row gap-3">
             <textarea
               value={inviteEmails}
@@ -363,6 +386,9 @@ function PartyContent() {
               {inviteResult}
             </p>
           )}
+          <p className="text-xs text-gray-400 mt-2">
+            💡 Tip: Sharing the link directly is the fastest way to invite people.
+          </p>
         </div>
       )}
 
