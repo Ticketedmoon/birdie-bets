@@ -40,7 +40,7 @@ function JoinPartyForm() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-8 sm:px-6 sm:py-10">
+    <div className="mx-auto w-full max-w-lg px-4 py-8 sm:px-6 sm:py-10">
       <h1 className="mb-8 text-2xl font-bold text-gray-900 sm:mb-10 sm:text-3xl">Join a Party</h1>
 
       <form onSubmit={handleSubmit} className="w-full space-y-6 sm:space-y-8">

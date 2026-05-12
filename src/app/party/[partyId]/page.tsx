@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { getParty, getAllPicksForParty, getUsersInfo, addInvites } from "@/lib/firestore";
+import { getParty, getAllPicksForParty, getUsersInfo, addInvites, deleteParty } from "@/lib/firestore";
 import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
 import { calculatePayouts } from "@/lib/payouts";
@@ -16,6 +16,7 @@ import type { Party, Picks, PlayerScore, LeaderboardEntry } from "@/types";
 function PartyContent() {
   const { partyId } = useParams<{ partyId: string }>();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { user } = useAuth();
   const [party, setParty] = useState<Party | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -24,14 +25,16 @@ function PartyContent() {
   const [error, setError] = useState("");
   const [inviteCopied, setInviteCopied] = useState(false);
   const [emailBanner, setEmailBanner] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
+  const [countdown, setCountdown] = useState(300);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmails, setInviteEmails] = useState("");
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteResult, setInviteResult] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const AUTO_REFRESH_SECONDS = 300; // 5 minutes
+  const AUTO_REFRESH_SECONDS = 300;
 
   // Show email send results from create flow
   useEffect(() => {
@@ -239,6 +242,18 @@ function PartyContent() {
       setInviteResult("Failed to send invites — but invite code still works.");
     }
     setInviteSending(false);
+  };
+
+  const handleDeleteParty = async () => {
+    if (!party || !partyId) return;
+    setDeleting(true);
+    try {
+      await deleteParty(partyId);
+      router.push("/dashboard");
+    } catch {
+      setError("Failed to delete party");
+      setDeleting(false);
+    }
   };
 
   if (loading) {
@@ -635,6 +650,41 @@ function PartyContent() {
         </div>
         <div>Lowest total score wins 🏆</div>
       </div>
+
+      {/* Delete Party — only visible to creator */}
+      {user?.uid === party.createdBy && (
+        <div className="mt-12 border-t border-gray-200 pt-8">
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-sm text-red-400 hover:text-red-600 transition-colors"
+            >
+              🗑️ Delete this party
+            </button>
+          ) : (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+              <p className="text-sm font-medium text-red-800 mb-3">
+                Are you sure? This will permanently delete the party, all picks, and all invites.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDeleteParty}
+                  disabled={deleting}
+                  className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {deleting ? "Deleting..." : "Yes, delete permanently"}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="bg-white border border-gray-300 text-gray-700 text-sm font-medium py-2 px-4 rounded-lg transition-colors hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

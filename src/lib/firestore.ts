@@ -5,6 +5,7 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   arrayUnion,
@@ -93,6 +94,20 @@ export async function updatePartyStatus(
   status: Party["status"]
 ): Promise<void> {
   await updateDoc(doc(db(), "parties", partyId), { status });
+}
+
+export async function deleteParty(partyId: string): Promise<void> {
+  // Delete subcollections (picks, invites) first
+  const picksSnap = await getDocs(collection(db(), "parties", partyId, "picks"));
+  for (const d of picksSnap.docs) {
+    await deleteDoc(d.ref);
+  }
+  const invitesSnap = await getDocs(collection(db(), "parties", partyId, "invites"));
+  for (const d of invitesSnap.docs) {
+    await deleteDoc(d.ref);
+  }
+  // Delete the party document
+  await deleteDoc(doc(db(), "parties", partyId));
 }
 
 // --- Picks ---

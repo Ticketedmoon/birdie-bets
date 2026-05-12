@@ -160,7 +160,7 @@ function PicksContent() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
       <div className="mb-8">
         <h1 className="break-words text-2xl font-bold text-gray-900 sm:text-3xl">Pick Your Players</h1>
         <p className="mt-1 break-words text-sm text-gray-500 sm:text-base">
@@ -277,7 +277,7 @@ function PicksContent() {
 
       {/* Summary & Save */}
       <div className="sticky bottom-0 z-10 -mx-4 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:py-4">
-        <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-gray-600">
             {[picks.groupA, picks.groupB, picks.groupC, picks.groupD, picks.wildcard1, picks.wildcard2].filter(Boolean).length}
             /6 players selected
