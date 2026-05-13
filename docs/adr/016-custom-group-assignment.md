@@ -38,9 +38,10 @@ party.customGroups?: {
 - Simple, fast, mobile-friendly
 
 ### Picks Page Behaviour
-- If `party.customGroups` exists → use those groups
-- If not → fall back to OWGR-based auto-groups (filtered by tournament field)
-- Wildcards = all field players not in the custom groups
+- `party.customGroups` is **always** populated at creation time (either manually customised or auto-snapshotted from OWGR — see ADR-017)
+- `party.snapshotWildcards` freezes the wildcard pool at creation time (ADR-017)
+- Groups and wildcards do not change after party creation, regardless of OWGR ranking updates
+- Legacy parties without `customGroups` fall back to live OWGR-based auto-groups
 
 ## Consequences
 
@@ -49,8 +50,9 @@ party.customGroups?: {
 - Simple click-to-move UI works on desktop and mobile
 - Optional — can skip and use OWGR defaults
 - Custom groups persist with the party in Firestore
+- Groups are always frozen at creation (ADR-017), preventing drift from ranking changes
 
 ### Negative
 - Creator could make unfair groups (by design — it's their party)
 - Groups are set at creation time and can't be changed later (could add editing later)
-- If creator doesn't customise, the OWGR defaults are used (good fallback)
+- If the tournament field isn't confirmed at creation time, some players in the snapshot may not actually enter — handled by the validation gate (ADR-018)

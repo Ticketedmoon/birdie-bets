@@ -15,8 +15,8 @@ Implement **lazy auto-sync** — check the ESPN tournament status on every page 
 ### Transition Rules
 | Current Status | ESPN Status | New Status |
 |---------------|-------------|------------|
-| `picking` | `in` (tournament live) | `locked` |
-| `picking` | `post` (tournament over) | `complete` |
+| `picking` | `in` (tournament live) | `locked` *(only if all picks valid — see ADR-018)* |
+| `picking` | `post` (tournament over) | `complete` *(only if all picks valid)* |
 | `locked` | `post` (tournament over) | `complete` |
 
 ### Implementation
@@ -24,6 +24,7 @@ Implement **lazy auto-sync** — check the ESPN tournament status on every page 
 - Called on **every party page load** and **every leaderboard refresh**
 - Called on the **picks page load** — so users visiting a stale picks page see it's locked
 - **Stale page protection**: When saving picks, the app re-fetches the party and re-checks ESPN status before writing. If the tournament has started, the save is rejected with a clear error message.
+- **Pick validation gate** (ADR-018): Before locking, all members' picks are validated against the confirmed ESPN field. If any picks are invalid, locking is blocked and affected members are emailed.
 
 ### Where It's Called
 1. Party leaderboard page — on initial load and every 5-minute auto-refresh

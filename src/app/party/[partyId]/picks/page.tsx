@@ -63,17 +63,26 @@ function PicksContent() {
             C: synced.customGroups.C.map((p) => ({ ...p, shortName: p.displayName, lastName: p.displayName.split(" ").pop() || "", amateur: false })),
             D: synced.customGroups.D.map((p) => ({ ...p, shortName: p.displayName, lastName: p.displayName.split(" ").pop() || "", amateur: false })),
           });
-          // Wildcards: fetch all ranked players, exclude those in custom groups
-          const dynamicData = await fetchDynamicGroups(synced.tournamentId);
-          const groupedIds = new Set([
-            ...synced.customGroups.A.map((p) => p.id),
-            ...synced.customGroups.B.map((p) => p.id),
-            ...synced.customGroups.C.map((p) => p.id),
-            ...synced.customGroups.D.map((p) => p.id),
-          ]);
-          const allPlayers = [...dynamicData.groups.A, ...dynamicData.groups.B, ...dynamicData.groups.C, ...dynamicData.groups.D, ...dynamicData.wildcards];
-          setWildcardPlayers(allPlayers.filter((p) => !groupedIds.has(p.id)));
-          setFieldAvailable(true);
+
+          if (synced.snapshotWildcards && synced.snapshotWildcards.length > 0) {
+            // Use frozen wildcard snapshot from party creation
+            setWildcardPlayers(synced.snapshotWildcards.map((p) => ({
+              ...p, shortName: p.displayName, lastName: p.displayName.split(" ").pop() || "", amateur: false,
+            })));
+            setFieldAvailable(true);
+          } else {
+            // Legacy party without snapshot wildcards — fall back to dynamic
+            const dynamicData = await fetchDynamicGroups(synced.tournamentId);
+            const groupedIds = new Set([
+              ...synced.customGroups.A.map((p) => p.id),
+              ...synced.customGroups.B.map((p) => p.id),
+              ...synced.customGroups.C.map((p) => p.id),
+              ...synced.customGroups.D.map((p) => p.id),
+            ]);
+            const allPlayers = [...dynamicData.groups.A, ...dynamicData.groups.B, ...dynamicData.groups.C, ...dynamicData.groups.D, ...dynamicData.wildcards];
+            setWildcardPlayers(allPlayers.filter((p) => !groupedIds.has(p.id)));
+            setFieldAvailable(true);
+          }
         } else {
           const dynamicData = await fetchDynamicGroups(synced.tournamentId);
           setPlayerGroups({ A: dynamicData.groups.A, B: dynamicData.groups.B, C: dynamicData.groups.C, D: dynamicData.groups.D });
@@ -90,6 +99,13 @@ function PicksContent() {
   }, [partyId, user]);
 
   const isLocked = party?.status !== "picking";
+
+  // Build set of player names flagged as invalid for the current user
+  const invalidPlayerNames = new Set<string>(
+    (party?.invalidPicks || [])
+      .filter((ip) => ip.uid === user?.uid)
+      .map((ip) => ip.playerName)
+  );
 
   const handleGroupPick = (group: PlayerGroup, player: Player) => {
     if (isLocked) return;
@@ -186,7 +202,20 @@ function PicksContent() {
   return (
     <div className="w-full px-4 py-6 sm:px-8 sm:py-8 lg:px-12">
       <div className="mb-8">
-        <h1 className="break-words text-2xl font-bold text-gray-900 sm:text-3xl">Pick Your Players</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="break-words text-2xl font-bold text-gray-900 sm:text-3xl">Pick Your Players</h1>
+          {!isLocked && (
+            <button
+              onClick={() => {
+                setPicks({ groupA: null, groupB: null, groupC: null, groupD: null, wildcard1: null, wildcard2: null });
+                setWildcardSearch("");
+              }}
+              className="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 hover:border-red-300 sm:text-sm sm:px-4 sm:py-2"
+            >
+              Reset All
+            </button>
+          )}
+        </div>
         <p className="mt-1 break-words text-sm text-gray-500 sm:text-base">
           {party?.tournamentName} — Select 1 player from each group + 2 wildcards
         </p>
@@ -203,6 +232,18 @@ function PicksContent() {
         </div>
       )}
 
+      {invalidPlayerNames.size > 0 && !isLocked && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg mb-6">
+          <p className="font-semibold text-sm sm:text-base">⚠️ Some of your picks are not in the confirmed tournament field</p>
+          <p className="text-xs sm:text-sm mt-1">
+            Please replace: <strong>{Array.from(invalidPlayerNames).join(", ")}</strong>
+          </p>
+          <p className="text-xs text-amber-600 mt-1">
+            The game can&apos;t start until all members have valid picks.
+          </p>
+        </div>
+      )}
+
       {/* Groups A-D */}
       {(["A", "B", "C", "D"] as PlayerGroup[]).map((group) => {
         const key = `group${group}` as keyof Picks;
@@ -211,20 +252,26 @@ function PicksContent() {
           <div key={group} className="mb-8">
             <h2 className="mb-3 flex flex-wrap items-center gap-2 text-lg font-semibold text-gray-800">
               {GROUP_LABELS[group]}
-              {selected && (
+              {selected && !invalidPlayerNames.has(selected.playerName) && (
                 <span className="text-sm text-green-600 break-words">✓ {selected.playerName}</span>
+              )}
+              {selected && invalidPlayerNames.has(selected.playerName) && (
+                <span className="text-sm text-red-600 break-words">⚠️ {selected.playerName} — not in field</span>
               )}
             </h2>
             <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
               {playerGroups[group].map((player) => {
                 const isSelected = selected?.playerId === player.id;
+                const isInvalid = isSelected && invalidPlayerNames.has(player.displayName);
                 return (
                   <button
                     key={player.id}
                     onClick={() => handleGroupPick(group, player)}
                     disabled={isLocked}
                     className={`rounded-xl border-2 p-3 text-left transition-all sm:p-4 ${
-                      isSelected
+                      isInvalid
+                        ? "border-red-500 bg-red-50 ring-2 ring-red-200"
+                        : isSelected
                         ? "border-green-600 bg-green-50 ring-2 ring-green-200"
                         : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
                     } ${isLocked ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
@@ -232,8 +279,11 @@ function PicksContent() {
                     <div className="break-words text-sm font-medium leading-snug text-gray-900">
                       {player.displayName}
                     </div>
-                    {isSelected && (
+                    {isSelected && !isInvalid && (
                       <div className="text-green-600 text-xs mt-1">✓ Selected</div>
+                    )}
+                    {isInvalid && (
+                      <div className="text-red-600 text-xs mt-1">⚠️ Not in field</div>
                     )}
                   </button>
                 );
@@ -250,11 +300,17 @@ function PicksContent() {
         </h2>
         <p className="mb-3 flex flex-wrap gap-x-2 gap-y-1 text-sm text-gray-500">
           Choose any 2 players not in Groups A–D.
-          {picks.wildcard1 && (
+          {picks.wildcard1 && !invalidPlayerNames.has(picks.wildcard1.playerName) && (
             <span className="text-green-600 break-words">✓ {picks.wildcard1.playerName}</span>
           )}
-          {picks.wildcard2 && (
+          {picks.wildcard1 && invalidPlayerNames.has(picks.wildcard1.playerName) && (
+            <span className="text-red-600 break-words">⚠️ {picks.wildcard1.playerName} — not in field</span>
+          )}
+          {picks.wildcard2 && !invalidPlayerNames.has(picks.wildcard2.playerName) && (
             <span className="text-green-600 break-words">✓ {picks.wildcard2.playerName}</span>
+          )}
+          {picks.wildcard2 && invalidPlayerNames.has(picks.wildcard2.playerName) && (
+            <span className="text-red-600 break-words">⚠️ {picks.wildcard2.playerName} — not in field</span>
           )}
         </p>
 
@@ -269,6 +325,7 @@ function PicksContent() {
         <div className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-gray-200 p-2 sm:grid-cols-3 sm:gap-3 sm:p-3">
           {filteredWildcards.map((player) => {
             const isSelected = isWildcardSelected(player.id);
+            const isInvalid = isSelected && invalidPlayerNames.has(player.displayName);
             const bothFilled = !!(picks.wildcard1 && picks.wildcard2) && !isSelected;
             return (
               <button
@@ -276,7 +333,9 @@ function PicksContent() {
                 onClick={() => handleWildcardPick(player)}
                 disabled={isLocked || bothFilled}
                 className={`rounded-lg border p-3 text-left text-sm transition-all ${
-                  isSelected
+                  isInvalid
+                    ? "border-red-500 bg-red-50"
+                    : isSelected
                     ? "border-green-600 bg-green-50"
                     : bothFilled
                     ? "border-gray-100 bg-gray-50 opacity-40 cursor-not-allowed"
@@ -289,7 +348,8 @@ function PicksContent() {
                   )}
                   <span className="truncate font-medium text-gray-900">{player.displayName}</span>
                 </div>
-                {isSelected && <div className="text-green-600 text-xs mt-0.5">✓ Selected</div>}
+                {isSelected && !isInvalid && <div className="text-green-600 text-xs mt-0.5">✓ Selected</div>}
+                {isInvalid && <div className="text-red-600 text-xs mt-0.5">⚠️ Not in field</div>}
               </button>
             );
           })}

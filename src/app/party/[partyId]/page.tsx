@@ -33,6 +33,7 @@ function PartyContent() {
   const [inviteResult, setInviteResult] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [tournamentCountdown, setTournamentCountdown] = useState("");
 
   const AUTO_REFRESH_SECONDS = 300;
 
@@ -203,6 +204,36 @@ function PartyContent() {
     return () => clearInterval(interval);
   }, [party, loading]);
 
+  // Tournament start countdown (updates every minute)
+  useEffect(() => {
+    if (!party || party.status !== "picking") return;
+
+    const updateCountdown = () => {
+      const start = new Date(party.tournamentStartDate).getTime();
+      const now = Date.now();
+      const diff = start - now;
+
+      if (diff <= 0) {
+        setTournamentCountdown("");
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+      const parts: string[] = [];
+      if (days > 0) parts.push(`${days}d`);
+      if (hours > 0) parts.push(`${hours}h`);
+      parts.push(`${minutes}m`);
+      setTournamentCountdown(parts.join(" "));
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60_000);
+    return () => clearInterval(interval);
+  }, [party]);
+
   const handleCopyInvite = () => {
     if (!party) return;
     const url = `${window.location.origin}/party/join?code=${party.inviteCode}`;
@@ -297,6 +328,11 @@ function PartyContent() {
             {party.tournamentName} • {party.memberUids.length} member
             {party.memberUids.length !== 1 ? "s" : ""}
           </p>
+          {tournamentCountdown && (
+            <p className="mt-1 text-xs sm:text-sm font-medium text-amber-700">
+              ⏳ Tournament starts in {tournamentCountdown}
+            </p>
+          )}
           {party.buyIn > 0 && (() => {
             const payouts = calculatePayouts(party);
             return (
@@ -325,12 +361,6 @@ function PartyContent() {
           })()}
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
-          <button
-            onClick={handleCopyInvite}
-            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto"
-          >
-            {inviteCopied ? "✓ Copied!" : `📋 Invite Code: ${party.inviteCode}`}
-          </button>
           <button
             onClick={() => setShowInviteForm(!showInviteForm)}
             className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 sm:w-auto"
@@ -426,6 +456,27 @@ function PartyContent() {
         <div className="mb-6 flex flex-col gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 sm:flex-row sm:items-center sm:justify-between">
           <span className="break-words">{emailBanner}</span>
           <button onClick={() => setEmailBanner(null)} className="self-end text-green-600 transition-colors hover:text-green-800 sm:ml-4">✕</button>
+        </div>
+      )}
+
+      {party.invalidPicks && party.invalidPicks.length > 0 && party.status === "picking" && (
+        <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold">⚠️ Tournament starting — some members have picks not in the confirmed field</p>
+          <p className="mt-1 text-xs sm:text-sm text-amber-700">
+            The game will lock automatically once all picks are valid. Affected members have been emailed.
+          </p>
+          <ul className="mt-2 space-y-1 text-xs sm:text-sm">
+            {Array.from(new Set(party.invalidPicks.map((ip) => ip.uid))).map((uid) => {
+              const memberPicks = party.invalidPicks!.filter((ip) => ip.uid === uid);
+              const memberEntry = leaderboard.find((e) => e.uid === uid);
+              const memberName = memberEntry?.userName || uid;
+              return (
+                <li key={uid}>
+                  <strong>{memberName}</strong>: {memberPicks.map((ip) => ip.playerName).join(", ")}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 

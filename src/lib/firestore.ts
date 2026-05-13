@@ -39,7 +39,8 @@ export async function createParty(
   currency: string = "EUR",
   secondPlacePayout: boolean = false,
   thirdPlacePayout: boolean = false,
-  customGroups?: Party["customGroups"]
+  customGroups?: Party["customGroups"],
+  snapshotWildcards?: Party["snapshotWildcards"]
 ): Promise<Party> {
   const partyRef = doc(collection(db(), "parties"));
   const party: Omit<Party, "id"> = {
@@ -57,6 +58,7 @@ export async function createParty(
     secondPlacePayout,
     thirdPlacePayout,
     ...(customGroups ? { customGroups } : {}),
+    ...(snapshotWildcards ? { snapshotWildcards } : {}),
   };
   await setDoc(partyRef, party);
   return { id: partyRef.id, ...party };
@@ -96,6 +98,32 @@ export async function updatePartyStatus(
   status: Party["status"]
 ): Promise<void> {
   await updateDoc(doc(db(), "parties", partyId), { status });
+}
+
+export async function updatePartyInvalidPicks(
+  partyId: string,
+  invalidPicks: Party["invalidPicks"]
+): Promise<void> {
+  await updateDoc(doc(db(), "parties", partyId), { invalidPicks });
+}
+
+export async function clearPartyInvalidPicks(partyId: string): Promise<void> {
+  await updateDoc(doc(db(), "parties", partyId), {
+    invalidPicks: [],
+    lastInvalidNotifiedAt: null,
+  });
+}
+
+export async function updatePartyLastNotified(partyId: string): Promise<void> {
+  await updateDoc(doc(db(), "parties", partyId), {
+    lastInvalidNotifiedAt: new Date().toISOString(),
+  });
+}
+
+export async function getUserEmail(uid: string): Promise<string | null> {
+  const snap = await getDoc(doc(db(), "users", uid));
+  if (!snap.exists()) return null;
+  return snap.data().email || null;
 }
 
 export async function deleteParty(partyId: string): Promise<void> {

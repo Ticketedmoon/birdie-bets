@@ -68,6 +68,12 @@ export interface Party {
     C: { id: string; displayName: string }[];
     D: { id: string; displayName: string }[];
   };
+  /** Frozen wildcard pool captured at party creation time */
+  snapshotWildcards?: { id: string; displayName: string }[];
+  /** Players picked by members that are not in the confirmed tournament field */
+  invalidPicks?: { uid: string; playerName: string; slot: string }[];
+  /** Timestamp of last email notification sent for invalid picks */
+  lastInvalidNotifiedAt?: string;
 }
 
 export interface PartyInvite {

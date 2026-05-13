@@ -55,6 +55,8 @@ You pick 1 from each group + 2 wildcards. No stacking the world's best!
 
 ### 🔒 Fair Play
 - Picks lock automatically when the tournament starts (synced with ESPN)
+- Player groups and wildcards are **frozen at party creation** — no ranking drift
+- If any member has a player not in the confirmed field, **locking is blocked** and they're emailed to update
 - Other players' picks are hidden until lock
 - Stale page protection — saving picks re-checks tournament status server-side
 
@@ -132,6 +134,7 @@ src/
 ├── app/
 │   ├── api/
 │   │   ├── invite/route.ts        # Email invite API (Resend)
+│   │   ├── notify-invalid-picks/route.ts  # Email members with invalid picks
 │   │   └── rankings/route.ts      # OWGR proxy (avoids CORS)
 │   ├── dashboard/page.tsx         # Party list (active + past)
 │   ├── login/page.tsx             # Google sign-in
@@ -149,6 +152,7 @@ src/
 │   ├── firestore.ts               # Firestore CRUD operations
 │   ├── partySync.ts               # Auto-lock parties when tournament starts
 │   ├── payouts.ts                 # Payout calculator (1st/2nd/3rd)
+│   ├── pickValidation.ts          # Validate picks against tournament field
 │   └── playerGroups.ts            # Fallback player group config
 ├── types/index.ts                 # TypeScript interfaces
 └── docs/adr/                      # Architecture Decision Records
@@ -176,6 +180,8 @@ All major design decisions are documented as ADRs:
 | [014](docs/adr/014-player-id-matching.md) | Player ID matching — name-based fallback |
 | [015](docs/adr/015-field-filtered-groups.md) | Tournament field-filtered player groups |
 | [016](docs/adr/016-custom-group-assignment.md) | Custom player group assignment by party creator |
+| [017](docs/adr/017-frozen-player-snapshots.md) | Freeze player groups & wildcards at party creation |
+| [018](docs/adr/018-field-validation-gate.md) | Field validation gate before tournament lock |
 
 ---
 
