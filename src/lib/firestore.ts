@@ -9,6 +9,7 @@ import {
   query,
   where,
   arrayUnion,
+  arrayRemove,
   Timestamp,
   writeBatch,
 } from "firebase/firestore";
@@ -92,6 +93,18 @@ export async function joinPartyByCode(code: string, uid: string): Promise<Party 
   });
 
   return { ...party, memberUids: [...party.memberUids, uid] };
+}
+
+export async function leaveParty(partyId: string, uid: string): Promise<void> {
+  await updateDoc(doc(db(), "parties", partyId), {
+    memberUids: arrayRemove(uid),
+  });
+  // Delete the member's picks if any exist
+  const picksRef = doc(db(), "parties", partyId, "picks", uid);
+  const picksSnap = await getDoc(picksRef);
+  if (picksSnap.exists()) {
+    await deleteDoc(picksRef);
+  }
 }
 
 export async function updatePartyStatus(

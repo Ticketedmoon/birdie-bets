@@ -5,7 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { getParty, getAllPicksForParty, getUsersInfo, addInvites, deleteParty } from "@/lib/firestore";
+import { getParty, getAllPicksForParty, getUsersInfo, addInvites, deleteParty, leaveParty } from "@/lib/firestore";
 import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
 import { calculatePayouts } from "@/lib/payouts";
@@ -33,6 +33,8 @@ function PartyContent() {
   const [inviteResult, setInviteResult] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [tournamentCountdown, setTournamentCountdown] = useState("");
   const [mobileView, setMobileView] = useState<"cards" | "table">("cards");
   const [unlockSending, setUnlockSending] = useState<Record<string, boolean>>({});
@@ -285,6 +287,18 @@ function PartyContent() {
       setInviteResult("Failed to send invites — but invite code still works.");
     }
     setInviteSending(false);
+  };
+
+  const handleLeaveParty = async () => {
+    if (!party || !partyId || !user) return;
+    setLeaving(true);
+    try {
+      await leaveParty(partyId, user.uid);
+      router.push("/dashboard");
+    } catch {
+      setError("Failed to leave party");
+      setLeaving(false);
+    }
   };
 
   const handleDeleteParty = async () => {
@@ -894,40 +908,78 @@ function PartyContent() {
         <div>Lowest total score wins 🏆</div>
       </div>
 
-      {/* Delete Party — only visible to creator */}
-      {user?.uid === party.createdBy && (
-        <div className="mt-12 border-t border-gray-200 pt-8">
-          {!showDeleteConfirm ? (
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-sm text-red-400 hover:text-red-600 transition-colors"
-            >
-              🗑️ Delete this party
-            </button>
-          ) : (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-800 mb-3">
-                Are you sure? This will permanently delete the party, all picks, and all invites.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleDeleteParty}
-                  disabled={deleting}
-                  className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {deleting ? "Deleting..." : "Yes, delete permanently"}
-                </button>
-                <button
-                  onClick={() => setShowDeleteConfirm(false)}
-                  className="bg-white border border-gray-300 text-gray-700 text-sm font-medium py-2 px-4 rounded-lg transition-colors hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
+      {/* Leave / Delete Party actions */}
+      <div className="mt-12 border-t border-gray-200 pt-8 flex flex-col gap-4">
+        {/* Leave Party — visible to non-creators */}
+        {user?.uid !== party.createdBy && (
+          <>
+            {!showLeaveConfirm ? (
+              <button
+                onClick={() => setShowLeaveConfirm(true)}
+                className="text-sm text-orange-400 hover:text-orange-600 transition-colors self-start"
+              >
+                🚪 Leave this party
+              </button>
+            ) : (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <p className="text-sm font-medium text-orange-800 mb-3">
+                  Are you sure you want to leave? Your picks will be deleted and you&apos;ll need the invite code to rejoin.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleLeaveParty}
+                    disabled={leaving}
+                    className="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {leaving ? "Leaving..." : "Yes, leave party"}
+                  </button>
+                  <button
+                    onClick={() => setShowLeaveConfirm(false)}
+                    className="bg-white border border-gray-300 text-gray-700 text-sm font-medium py-2 px-4 rounded-lg transition-colors hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
+
+        {/* Delete Party — only visible to creator */}
+        {user?.uid === party.createdBy && (
+          <>
+            {!showDeleteConfirm ? (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-sm text-red-400 hover:text-red-600 transition-colors self-start"
+              >
+                🗑️ Delete this party
+              </button>
+            ) : (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800 mb-3">
+                  Are you sure? This will permanently delete the party, all picks, and all invites.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleDeleteParty}
+                    disabled={deleting}
+                    className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {deleting ? "Deleting..." : "Yes, delete permanently"}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="bg-white border border-gray-300 text-gray-700 text-sm font-medium py-2 px-4 rounded-lg transition-colors hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
