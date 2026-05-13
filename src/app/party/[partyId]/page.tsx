@@ -910,8 +910,8 @@ function PartyContent() {
 
       {/* Leave / Delete Party actions */}
       <div className="mt-12 border-t border-gray-200 pt-8 flex flex-col gap-4">
-        {/* Leave Party — visible to non-creators */}
-        {user?.uid !== party.createdBy && (
+        {/* Leave Party — visible to non-creators, only during picking phase */}
+        {user?.uid !== party.createdBy && party.status === "picking" && (
           <>
             {!showLeaveConfirm ? (
               <button
