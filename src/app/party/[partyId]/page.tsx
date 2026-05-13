@@ -34,6 +34,7 @@ function PartyContent() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [tournamentCountdown, setTournamentCountdown] = useState("");
+  const [mobileView, setMobileView] = useState<"cards" | "table">("cards");
 
   const AUTO_REFRESH_SECONDS = 300;
 
@@ -400,12 +401,12 @@ function PartyContent() {
           {/* Shareable link — primary method */}
           <div className="mb-4 rounded-lg bg-gray-50 border border-gray-200 p-3">
             <p className="text-xs font-medium text-gray-500 mb-2">Share this link:</p>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 type="text"
                 readOnly
                 value={`${typeof window !== "undefined" ? window.location.origin : ""}/party/join?code=${party.inviteCode}`}
-                className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 font-mono"
+                className="flex-1 min-w-0 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 font-mono"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
               <button
@@ -546,7 +547,136 @@ function PartyContent() {
           <p className="text-gray-500">No picks submitted yet. Share the invite code to get started!</p>
         </div>
       ) : (
-        <div className="-mx-4 overflow-x-auto rounded-xl border border-gray-200 before:block before:px-3 before:py-2 before:text-center before:text-xs before:font-medium before:text-gray-500 before:content-['←_Scroll_→'] sm:mx-0 sm:before:hidden">
+        <>
+        {/* Mobile view toggle */}
+        <div className="flex justify-end mb-3 sm:hidden">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+            <button
+              onClick={() => setMobileView("cards")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                mobileView === "cards" ? "bg-green-700 text-white" : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Cards
+            </button>
+            <button
+              onClick={() => setMobileView("table")}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                mobileView === "table" ? "bg-green-700 text-white" : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Table
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile card layout */}
+        <div className={`space-y-3 ${mobileView === "cards" ? "sm:hidden" : "hidden"}`}>
+          {leaderboard.map((entry, idx) => {
+            const isOwnRow = entry.uid === user?.uid;
+            const showPicks = picksRevealed || isOwnRow;
+            const hasSubmitted = entry.picks.some((p) => p.playerId);
+            const pickLabels = ["A", "B", "C", "D", "W1", "W2"];
+            return (
+              <div
+                key={entry.uid}
+                className={`rounded-xl border-2 overflow-hidden ${
+                  isOwnRow ? "border-green-300 bg-green-50" : "border-gray-200 bg-white"
+                }`}
+              >
+                {/* Card header */}
+                <div className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-gray-100">
+                  <span className="text-sm font-bold text-gray-400 w-6 text-center shrink-0">
+                    {idx === 0 ? "🏆" : idx === 1 && party.secondPlacePayout ? "🥈" : idx === 2 && party.thirdPlacePayout ? "🥉" : idx + 1}
+                  </span>
+                  {entry.userPhotoURL && (
+                    <img src={entry.userPhotoURL} alt="" className="h-7 w-7 shrink-0 rounded-full" referrerPolicy="no-referrer" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <span className="truncate font-semibold text-sm text-gray-900">
+                      {entry.userName}
+                      {isOwnRow && <span className="text-green-600 text-xs ml-1">(you)</span>}
+                    </span>
+                    {!showPicks && (
+                      <span className={`ml-2 text-xs ${hasSubmitted ? "text-green-600" : "text-gray-400"}`}>
+                        {hasSubmitted ? "✓ Submitted" : "Waiting..."}
+                      </span>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {showPicks ? (
+                      <span className={`text-lg font-bold ${
+                        entry.totalScore < 0 ? "text-red-600" : entry.totalScore > 0 ? "text-gray-800" : "text-gray-500"
+                      }`}>
+                        {entry.displayTotal}
+                      </span>
+                    ) : (
+                      <span className="text-lg text-gray-300">🔒</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card picks */}
+                {showPicks && (
+                  <div className="divide-y divide-gray-100">
+                    {entry.picks.map((pick, pickIdx) => {
+                      const isCut = ["cut", "wd", "dq"].includes(pick.status);
+                      return (
+                        <div
+                          key={pickIdx}
+                          className={`flex items-center gap-2 px-3.5 py-2 ${isCut ? "bg-red-50" : ""}`}
+                        >
+                          <span className="w-6 shrink-0 text-center text-[11px] font-bold text-gray-400">
+                            {pickLabels[pickIdx]}
+                          </span>
+                          <span className={`flex-1 min-w-0 truncate text-sm ${
+                            isCut ? "text-red-700 line-through" : "text-gray-700"
+                          }`}>
+                            {pick.playerName}
+                          </span>
+                          <span className={`shrink-0 text-sm font-bold ${
+                            isCut ? "text-red-700" : pick.scoreToPar < 0 ? "text-red-600" : pick.scoreToPar > 0 ? "text-gray-700" : "text-gray-500"
+                          }`}>
+                            {pick.displayScore}
+                          </span>
+                          {isCut && (
+                            <span className="shrink-0 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                              CUT
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Payout badge */}
+                {showPicks && party.buyIn > 0 && (
+                  <div className="px-3.5 py-1.5 border-t border-gray-100">
+                    {idx === 0 && (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                        Wins €{calculatePayouts(party).first}
+                      </span>
+                    )}
+                    {idx === 1 && party.secondPlacePayout && (
+                      <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-bold text-gray-600">
+                        2nd — €{calculatePayouts(party).second}
+                      </span>
+                    )}
+                    {idx === 2 && party.thirdPlacePayout && (
+                      <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-bold text-orange-600">
+                        3rd — €{calculatePayouts(party).third}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop table (always on sm+, or on mobile when table view selected) */}
+        <div className={`-mx-4 overflow-x-auto rounded-xl border border-gray-200 sm:mx-0 ${mobileView === "table" ? "sm:block" : "hidden sm:block"}`}>
           <table className="w-full min-w-[880px] text-sm">
             <thead>
               <tr className="bg-green-800 text-white">
@@ -696,6 +826,7 @@ function PartyContent() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* Legend */}

@@ -96,7 +96,7 @@ function PartyCard({
               ) : (
                 <button
                   onClick={handleDelete}
-                  className="rounded-lg p-1.5 text-gray-300 opacity-0 transition-all hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                  className="rounded-lg p-2.5 text-gray-300 transition-all hover:bg-red-50 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100"
                   title="Delete party"
                 >
                   🗑️

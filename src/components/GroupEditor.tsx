@@ -85,16 +85,16 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
       </div>
 
       {selectedPlayer && (
-        <div className="mb-4 rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm flex items-center justify-between">
-          <span>
+        <div className="mb-4 rounded-lg border border-green-300 bg-green-50 px-3 py-2.5 text-sm sm:px-4">
+          <p className="mb-2 sm:mb-0 sm:inline">
             Move <strong>{selectedPlayer.player.displayName}</strong> to:
-          </span>
-          <div className="flex gap-2">
+          </p>
+          <div className="flex flex-wrap gap-2 mt-1.5 sm:mt-0 sm:inline-flex sm:ml-2">
             {GROUP_NAMES.filter((g) => g !== selectedPlayer.from).map((g) => (
               <button
                 type="button" key={g}
                 onClick={() => moveToGroup(selectedPlayer.player, selectedPlayer.from, g)}
-                className="rounded bg-white border border-gray-300 px-3 py-1 text-xs font-medium hover:bg-gray-50"
+                className="rounded bg-white border border-gray-300 px-3 py-2 text-xs font-medium hover:bg-gray-50 min-h-[44px] min-w-[44px]"
               >
                 Group {g}
               </button>
@@ -102,14 +102,14 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
             {selectedPlayer.from !== "pool" && (
               <button
                 type="button" onClick={() => moveToGroup(selectedPlayer.player, selectedPlayer.from, "pool")}
-                className="rounded bg-gray-200 px-3 py-1 text-xs font-medium hover:bg-gray-300"
+                className="rounded bg-gray-200 px-3 py-2 text-xs font-medium hover:bg-gray-300 min-h-[44px]"
               >
                 → Wildcard
               </button>
             )}
             <button
               type="button" onClick={() => setSelectedPlayer(null)}
-              className="rounded px-2 py-1 text-xs text-gray-400 hover:text-gray-600"
+              className="rounded px-3 py-2 text-xs text-gray-400 hover:text-gray-600 min-h-[44px] min-w-[44px]"
             >
               ✕
             </button>
@@ -166,7 +166,7 @@ export function GroupEditor({ groups, wildcards, fieldAvailable, onSave }: Group
             <button
               type="button" key={player.id}
               onClick={() => handlePlayerClick(player, "pool")}
-              className={`text-left rounded-md border px-2 py-1.5 text-xs transition-all ${
+              className={`text-left rounded-md border px-3 py-2.5 text-xs transition-all ${
                 selectedPlayer?.player.id === player.id
                   ? "border-green-500 bg-green-100 ring-2 ring-green-300"
                   : "border-gray-200 bg-white hover:border-gray-400"

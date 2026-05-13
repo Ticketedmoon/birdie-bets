@@ -182,6 +182,7 @@ All major design decisions are documented as ADRs:
 | [016](docs/adr/016-custom-group-assignment.md) | Custom player group assignment by party creator |
 | [017](docs/adr/017-frozen-player-snapshots.md) | Freeze player groups & wildcards at party creation |
 | [018](docs/adr/018-field-validation-gate.md) | Field validation gate before tournament lock |
+| [019](docs/adr/019-mobile-card-leaderboard.md) | Mobile card layout for leaderboard with view toggle |
 
 ---
 
