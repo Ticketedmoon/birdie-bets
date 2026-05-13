@@ -1,20 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { getParty, savePicks, getPicks } from "@/lib/firestore";
+import { getParty, savePicks, getPicks, getPickUnlock } from "@/lib/firestore";
 import { fetchDynamicGroups } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
 import { GROUP_LABELS } from "@/lib/playerGroups";
-import type { Party, Player, Picks, PlayerPick, PlayerGroup } from "@/types";
+import type { Party, Player, Picks, PlayerPick, PlayerGroup, PickUnlock } from "@/types";
+import { Suspense } from "react";
 
 function PicksContent() {
   const { partyId } = useParams<{ partyId: string }>();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const router = useRouter();
+
+  const unlockToken = searchParams.get("unlock");
 
   const [party, setParty] = useState<Party | null>(null);
   const [picks, setPicks] = useState<Picks>({
@@ -33,12 +37,41 @@ function PicksContent() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [unlock, setUnlock] = useState<PickUnlock | null>(null);
+  const [unlockTimeLeft, setUnlockTimeLeft] = useState<number | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   useEffect(() => {
     if (!partyId || !user) return;
 
     const load = async () => {
       try {
+        // If an unlock token is present, validate it first
+        if (unlockToken) {
+          const unlockData = await getPickUnlock(partyId, unlockToken);
+          if (!unlockData) {
+            setError("Invalid unlock link.");
+            setLoading(false);
+            return;
+          }
+          if (unlockData.uid !== user.uid) {
+            setError("This unlock link is not for your account.");
+            setLoading(false);
+            return;
+          }
+          if (unlockData.used) {
+            setError("This unlock link has already been used.");
+            setLoading(false);
+            return;
+          }
+          if (new Date(unlockData.expiresAt).getTime() < Date.now()) {
+            setError("This unlock link has expired.");
+            setLoading(false);
+            return;
+          }
+          setUnlock(unlockData);
+        }
+
         const [partyData, existingPicks] = await Promise.all([
           getParty(partyId),
           getPicks(partyId, user.uid),
@@ -96,9 +129,23 @@ function PicksContent() {
     };
 
     load();
-  }, [partyId, user]);
+  }, [partyId, user, unlockToken]);
 
-  const isLocked = party?.status !== "picking";
+  // Countdown timer for unlock window
+  useEffect(() => {
+    if (!unlock) return;
+    const updateTimer = () => {
+      const remaining = new Date(unlock.expiresAt).getTime() - Date.now();
+      setUnlockTimeLeft(remaining > 0 ? remaining : 0);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [unlock]);
+
+  // When unlocked via token, allow picking even if party is locked
+  const isUnlocked = !!unlock && (unlockTimeLeft ?? 0) > 0;
+  const isLocked = isUnlocked ? party?.status === "complete" : party?.status !== "picking";
 
   // Build set of player names flagged as invalid for the current user
   const invalidPlayerNames = new Set<string>(
@@ -159,18 +206,33 @@ function PicksContent() {
     setError("");
     setSuccess("");
     try {
-      // Re-check party status right before saving (prevents stale page saves)
-      const freshParty = await getParty(partyId);
-      if (freshParty) {
-        const synced = await syncPartyStatus(freshParty);
-        if (synced.status !== "picking") {
-          setParty(synced);
-          setError("🔒 Tournament has started — picks are locked. Your changes were not saved.");
+      if (isUnlocked && unlockToken) {
+        // Use server-side API for unlock-based saves (validates token + saves atomically)
+        const res = await fetch("/api/submit-unlocked-picks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ partyId, callerUid: user.uid, unlockToken, picks }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Failed to save picks");
           setSaving(false);
           return;
         }
+      } else {
+        // Normal save: re-check party status right before saving (prevents stale page saves)
+        const freshParty = await getParty(partyId);
+        if (freshParty) {
+          const synced = await syncPartyStatus(freshParty);
+          if (synced.status !== "picking") {
+            setParty(synced);
+            setError("🔒 Tournament has started — picks are locked. Your changes were not saved.");
+            setSaving(false);
+            return;
+          }
+        }
+        await savePicks(partyId, user.uid, picks);
       }
-      await savePicks(partyId, user.uid, picks);
       setSuccess("Picks saved successfully!");
       setTimeout(() => router.push(`/party/${partyId}`), 1500);
     } catch (err) {
@@ -226,7 +288,21 @@ function PicksContent() {
         </p>
       </div>
 
-      {isLocked && (
+      {isUnlocked && unlockTimeLeft !== null && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-6">
+          <div className="flex items-center justify-between">
+            <span>🔓 You have temporary access to submit your picks.</span>
+            <span className="font-mono font-bold text-sm">
+              {Math.floor(unlockTimeLeft / 60000)}:{String(Math.floor((unlockTimeLeft % 60000) / 1000)).padStart(2, "0")}
+            </span>
+          </div>
+          {unlockTimeLeft < 300000 && (
+            <p className="text-xs text-green-600 mt-1">⚠️ Less than 5 minutes remaining!</p>
+          )}
+        </div>
+      )}
+
+      {isLocked && !isUnlocked && (
         <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6">
           🔒 Picks are locked — the tournament has started.
         </div>
@@ -390,7 +466,9 @@ export default function PicksPage() {
   return (
     <ProtectedRoute>
       <Navbar />
-      <PicksContent />
+      <Suspense fallback={<div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div></div>}>
+        <PicksContent />
+      </Suspense>
     </ProtectedRoute>
   );
 }

@@ -10,12 +10,13 @@ import {
   where,
   arrayUnion,
   Timestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { getFirebaseDb } from "@/lib/firebase";
 
 // Helper to get db instance
 const db = () => getFirebaseDb();
-import type { Party, Picks, PartyInvite } from "@/types";
+import type { Party, Picks, PartyInvite, PickUnlock } from "@/types";
 
 // Generate a 6-character invite code
 function generateInviteCode(): string {
@@ -142,6 +143,11 @@ export async function deleteParty(partyId: string): Promise<void> {
 
 // --- Picks ---
 
+export function hasIncompleteOrNoPicks(picks: Picks | null): boolean {
+  if (!picks) return true;
+  return !picks.groupA || !picks.groupB || !picks.groupC || !picks.groupD || !picks.wildcard1 || !picks.wildcard2;
+}
+
 export async function savePicks(partyId: string, uid: string, picks: Picks): Promise<void> {
   await setDoc(doc(db(), "parties", partyId, "picks", uid), {
     ...picks,
@@ -164,6 +170,66 @@ export async function getAllPicksForParty(
     result[d.id] = d.data() as Picks;
   });
   return result;
+}
+
+// --- Pick Unlocks ---
+
+const PICK_UNLOCK_DURATION_MS = 1000 * 60 * 60; // 1 hour
+
+export async function createPickUnlock(
+  partyId: string,
+  token: string,
+  uid: string,
+  createdBy: string
+): Promise<PickUnlock> {
+  const now = new Date();
+  const unlock: PickUnlock = {
+    uid,
+    createdAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + PICK_UNLOCK_DURATION_MS).toISOString(),
+    used: false,
+    createdBy,
+  };
+  await setDoc(doc(db(), "parties", partyId, "pickUnlocks", token), unlock);
+  return unlock;
+}
+
+export async function getPickUnlock(partyId: string, token: string): Promise<PickUnlock | null> {
+  const snap = await getDoc(doc(db(), "parties", partyId, "pickUnlocks", token));
+  if (!snap.exists()) return null;
+  return snap.data() as PickUnlock;
+}
+
+export async function invalidatePreviousUnlocks(partyId: string, uid: string): Promise<void> {
+  const q = query(
+    collection(db(), "parties", partyId, "pickUnlocks"),
+    where("uid", "==", uid),
+    where("used", "==", false)
+  );
+  const snap = await getDocs(q);
+  const batch = writeBatch(db());
+  snap.docs.forEach((d) => {
+    batch.update(d.ref, { used: true, usedAt: new Date().toISOString() });
+  });
+  if (!snap.empty) await batch.commit();
+}
+
+export async function savePicksWithUnlock(
+  partyId: string,
+  uid: string,
+  picks: Picks,
+  unlockToken: string
+): Promise<void> {
+  const batch = writeBatch(db());
+  batch.set(doc(db(), "parties", partyId, "picks", uid), {
+    ...picks,
+    lockedAt: picks.lockedAt || new Date().toISOString(),
+  });
+  batch.update(doc(db(), "parties", partyId, "pickUnlocks", unlockToken), {
+    used: true,
+    usedAt: new Date().toISOString(),
+  });
+  await batch.commit();
 }
 
 // --- Invites ---

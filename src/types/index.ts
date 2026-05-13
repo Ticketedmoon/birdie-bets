@@ -47,6 +47,15 @@ export interface Picks {
   lockedAt?: string;
 }
 
+export interface PickUnlock {
+  uid: string;
+  createdAt: string;
+  expiresAt: string;
+  used: boolean;
+  usedAt?: string;
+  createdBy: string;
+}
+
 export interface Party {
   id: string;
   name: string;

@@ -35,6 +35,8 @@ function PartyContent() {
   const [deleting, setDeleting] = useState(false);
   const [tournamentCountdown, setTournamentCountdown] = useState("");
   const [mobileView, setMobileView] = useState<"cards" | "table">("cards");
+  const [unlockSending, setUnlockSending] = useState<Record<string, boolean>>({});
+  const [unlockResult, setUnlockResult] = useState<Record<string, string>>({});
 
   const AUTO_REFRESH_SECONDS = 300;
 
@@ -319,6 +321,28 @@ function PartyContent() {
   const isLocked = party.status !== "picking";
   const picksRevealed = isLocked; // picks only visible once tournament starts
 
+  const handleSendUnlock = async (targetUid: string) => {
+    if (!user || !party) return;
+    setUnlockSending((prev) => ({ ...prev, [targetUid]: true }));
+    setUnlockResult((prev) => ({ ...prev, [targetUid]: "" }));
+    try {
+      const res = await fetch("/api/send-pick-unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partyId: party.id, callerUid: user.uid, targetUid }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setUnlockResult((prev) => ({ ...prev, [targetUid]: `✅ Unlock email sent to ${data.sentTo}` }));
+      } else {
+        setUnlockResult((prev) => ({ ...prev, [targetUid]: `❌ ${data.error}` }));
+      }
+    } catch {
+      setUnlockResult((prev) => ({ ...prev, [targetUid]: "❌ Failed to send unlock email" }));
+    }
+    setUnlockSending((prev) => ({ ...prev, [targetUid]: false }));
+  };
+
   return (
     <div className="w-full px-4 py-6 sm:px-8 sm:py-8 lg:px-12">
       {/* Header */}
@@ -602,6 +626,20 @@ function PartyContent() {
                         {hasSubmitted ? "✓ Submitted" : "Waiting..."}
                       </span>
                     )}
+                    {!isOwnRow && !hasSubmitted && user?.uid === party.createdBy && party.status === "locked" && (
+                      <div className="ml-2 flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleSendUnlock(entry.uid)}
+                          disabled={unlockSending[entry.uid]}
+                          className="inline-flex items-center rounded-md bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 hover:bg-purple-200 transition-colors disabled:opacity-50"
+                        >
+                          {unlockSending[entry.uid] ? "Sending..." : "📧 Send unlock"}
+                        </button>
+                        {unlockResult[entry.uid] && (
+                          <span className="text-[10px]">{unlockResult[entry.uid]}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     {showPicks ? (
@@ -744,6 +782,20 @@ function PartyContent() {
                         <span className={`ml-1 whitespace-nowrap text-xs ${hasSubmitted ? "text-green-600" : "text-gray-400"}`}>
                           {hasSubmitted ? "✓ Picks submitted" : "Waiting..."}
                         </span>
+                      )}
+                      {!isOwnRow && !hasSubmitted && user?.uid === party.createdBy && party.status === "locked" && (
+                        <div className="ml-1 inline-flex items-center gap-1">
+                          <button
+                            onClick={() => handleSendUnlock(entry.uid)}
+                            disabled={unlockSending[entry.uid]}
+                            className="inline-flex shrink-0 items-center rounded-md bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700 hover:bg-purple-200 transition-colors disabled:opacity-50"
+                          >
+                            {unlockSending[entry.uid] ? "Sending..." : "📧 Send unlock"}
+                          </button>
+                          {unlockResult[entry.uid] && (
+                            <span className="text-[10px] whitespace-nowrap">{unlockResult[entry.uid]}</span>
+                          )}
+                        </div>
                       )}
                     </div>
                   </td>
