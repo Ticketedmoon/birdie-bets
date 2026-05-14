@@ -3,32 +3,38 @@
 import { useCallback, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { doc, setDoc, collection } from "firebase/firestore";
+import { getFirebaseDb } from "@/lib/firebase";
+
+function parseBrowser(ua: string): string {
+  if (ua.includes("Firefox/")) return "Firefox";
+  if (ua.includes("Edg/")) return "Edge";
+  if (ua.includes("OPR/") || ua.includes("Opera/")) return "Opera";
+  if (ua.includes("Chrome/") && ua.includes("Safari/")) return "Chrome";
+  if (ua.includes("Safari/") && !ua.includes("Chrome/")) return "Safari";
+  if (ua.includes("MSIE") || ua.includes("Trident/")) return "IE";
+  return "Other";
+}
 
 /**
- * Fire-and-forget analytics POST. Failures are silently ignored
- * so analytics never block or degrade the user experience.
+ * Write analytics event directly to Firestore from the client.
+ * Fire-and-forget — failures are silently ignored so analytics
+ * never block or degrade the user experience.
  */
 function logEvent(data: Record<string, unknown>) {
-  const payload = JSON.stringify(data);
-
-  // Prefer sendBeacon — truly non-blocking, survives page navigations
-  if (typeof navigator !== "undefined" && navigator.sendBeacon) {
-    const blob = new Blob([payload], { type: "application/json" });
-    navigator.sendBeacon("/api/analytics", blob);
-    return;
+  try {
+    const db = getFirebaseDb();
+    const eventRef = doc(collection(db, "analytics"));
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    setDoc(eventRef, {
+      ...data,
+      browser: parseBrowser(ua),
+      userAgent: ua.slice(0, 256),
+      timestamp: new Date().toISOString(),
+    }).catch(() => {});
+  } catch {
+    // Silently ignore — analytics should never break the app
   }
-
-  // Fallback: fetch with 5s timeout so it never blocks the page
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-  fetch("/api/analytics", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: payload,
-    signal: controller.signal,
-  })
-    .catch(() => {})
-    .finally(() => clearTimeout(timeout));
 }
 
 /**
@@ -46,6 +52,20 @@ export function usePageView() {
       uid: user?.uid || undefined,
       email: user?.email || undefined,
     });
+
+    // Upsert last-visit record for authenticated users
+    if (user?.uid) {
+      try {
+        const db = getFirebaseDb();
+        setDoc(doc(db, "analytics_last_visit", user.uid), {
+          email: user.email || null,
+          lastPage: pathname,
+          lastVisit: new Date().toISOString(),
+        }).catch(() => {});
+      } catch {
+        // Silently ignore
+      }
+    }
   }, [pathname, user?.uid, user?.email]);
 }
 

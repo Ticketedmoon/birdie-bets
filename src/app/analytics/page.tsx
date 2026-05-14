@@ -3,18 +3,24 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { getFirebaseDb } from "@/lib/firebase";
 
 interface AnalyticsData {
   totalViews: number;
   uniqueUsers: number;
   days: number;
+  visitsLastHour: number;
+  visitsLastDay: number;
+  visitsLastWeek: number;
   byPage: Record<string, number>;
   byCountry: Record<string, number>;
   byBrowser: Record<string, number>;
   byType: Record<string, number>;
-  byUser: Record<string, { email: string | null; views: number; clicks: number }>;
+  byUser: Record<string, { email: string | null; views: number; clicks: number; lastHour: number; lastDay: number; lastWeek: number }>;
   byUserPage: { email: string | null; page: string; count: number }[];
-  recentEvents: Record<string, unknown>[];
+  recentEvents: Record<string, unknown>;
+  lastVisits: { uid: string; email: string | null; lastPage: string; lastVisit: string }[];
 }
 
 function sortedEntries(obj: Record<string, number>): [string, number][] {
@@ -63,25 +69,112 @@ export default function AnalyticsPage() {
   const fetchData = async (email: string, numDays: number) => {
     setFetching(true);
     setError("");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const adminEmail = process.env.NEXT_PUBLIC_ANALYTICS_ADMIN_EMAIL;
+    if (!adminEmail || email !== adminEmail) {
+      setError("Access denied — your account is not authorized to view analytics.");
+      setData(null);
+      setFetching(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/analytics?email=${encodeURIComponent(email)}&days=${numDays}&limit=500`, {
-        signal: controller.signal,
-      });
-      if (res.status === 403) {
-        setError("Access denied — your account is not authorized to view analytics.");
-        setData(null);
-      } else if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.detail || body.error || "Failed to load analytics.");
-      } else {
-        setData(await res.json());
+      const db = getFirebaseDb();
+      const since = new Date(Date.now() - numDays * 24 * 60 * 60 * 1000).toISOString();
+      const maxResults = 500;
+
+      const q = query(
+        collection(db, "analytics"),
+        orderBy("timestamp", "desc"),
+        limit(maxResults)
+      );
+      const snap = await getDocs(q);
+      const events = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>))
+        .filter((e) => (e.timestamp as string) >= since);
+
+      // Build summary
+      const byPage: Record<string, number> = {};
+      const byCountry: Record<string, number> = {};
+      const byBrowser: Record<string, number> = {};
+      const byType: Record<string, number> = {};
+      const byUser: Record<string, { email: string | null; views: number; clicks: number; lastHour: number; lastDay: number; lastWeek: number }> = {};
+      const userPageMap: Record<string, { email: string | null; page: string; count: number }> = {};
+
+      const now = Date.now();
+      const oneHourAgo = new Date(now - 60 * 60 * 1000).toISOString();
+      const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+      const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+      let visitsLastHour = 0;
+      let visitsLastDay = 0;
+      let visitsLastWeek = 0;
+
+      for (const event of events) {
+        const e = event as Record<string, unknown>;
+        const page = (e.page as string) || "unknown";
+        const ctry = (e.country as string) || "unknown";
+        const brow = (e.browser as string) || "unknown";
+        const type = (e.type as string) || "page_view";
+        const uid = e.uid as string | null;
+        const userEmail = e.email as string | null;
+        const ts = (e.timestamp as string) || "";
+
+        byPage[page] = (byPage[page] || 0) + 1;
+        byCountry[ctry] = (byCountry[ctry] || 0) + 1;
+        byBrowser[brow] = (byBrowser[brow] || 0) + 1;
+        byType[type] = (byType[type] || 0) + 1;
+
+        if (ts >= oneHourAgo) visitsLastHour++;
+        if (ts >= oneDayAgo) visitsLastDay++;
+        if (ts >= oneWeekAgo) visitsLastWeek++;
+
+        if (uid) {
+          if (!byUser[uid]) byUser[uid] = { email: null, views: 0, clicks: 0, lastHour: 0, lastDay: 0, lastWeek: 0 };
+          if (userEmail) byUser[uid].email = userEmail;
+          if (type === "click") byUser[uid].clicks++;
+          else byUser[uid].views++;
+          if (ts >= oneHourAgo) byUser[uid].lastHour++;
+          if (ts >= oneDayAgo) byUser[uid].lastDay++;
+          if (ts >= oneWeekAgo) byUser[uid].lastWeek++;
+
+          const key = `${uid}::${page}`;
+          if (!userPageMap[key]) userPageMap[key] = { email: userEmail, page, count: 0 };
+          if (userEmail) userPageMap[key].email = userEmail;
+          userPageMap[key].count++;
+        }
       }
-    } catch {
-      setError("Failed to connect to analytics API — request timed out.");
-    } finally {
-      clearTimeout(timeout);
+
+      // Fetch last-visit records
+      const lastVisitSnap = await getDocs(
+        query(collection(db, "analytics_last_visit"), orderBy("lastVisit", "desc"))
+      );
+      const lastVisits = lastVisitSnap.docs.map((d) => ({
+        uid: d.id,
+        email: (d.data().email as string) || null,
+        lastPage: (d.data().lastPage as string) || "unknown",
+        lastVisit: (d.data().lastVisit as string) || "",
+      }));
+
+      setData({
+        totalViews: events.length,
+        uniqueUsers: Object.keys(byUser).length,
+        days: numDays,
+        visitsLastHour,
+        visitsLastDay,
+        visitsLastWeek,
+        byPage,
+        byCountry,
+        byBrowser,
+        byType,
+        byUser,
+        byUserPage: Object.values(userPageMap).sort((a, b) => b.count - a.count),
+        recentEvents: events.slice(0, 50),
+        lastVisits,
+      });
+    } catch (err) {
+      console.error("Analytics fetch error:", err);
+      setError("Failed to load analytics: " + String(err));
     }
     setFetching(false);
   };
@@ -196,11 +289,18 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4 mb-8 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 mb-4 sm:grid-cols-4">
           <StatCard label="Total Events" value={data.totalViews} />
           <StatCard label="Unique Users" value={data.uniqueUsers} />
           <StatCard label="Page Views" value={data.byType?.page_view || 0} />
           <StatCard label="Clicks" value={data.byType?.click || 0} />
+        </div>
+
+        {/* Visit frequency */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <StatCard label="Last Hour" value={data.visitsLastHour} />
+          <StatCard label="Last 24 Hours" value={data.visitsLastDay} />
+          <StatCard label="Last 7 Days" value={data.visitsLastWeek} />
         </div>
 
         {/* Breakdowns */}
@@ -223,6 +323,9 @@ export default function AnalyticsPage() {
                     <th className="px-4 py-2 font-medium text-gray-500">Email</th>
                     <th className="px-4 py-2 font-medium text-gray-500 text-right">Views</th>
                     <th className="px-4 py-2 font-medium text-gray-500 text-right">Clicks</th>
+                    <th className="px-4 py-2 font-medium text-gray-500 text-right">Last Hour</th>
+                    <th className="px-4 py-2 font-medium text-gray-500 text-right">Last Day</th>
+                    <th className="px-4 py-2 font-medium text-gray-500 text-right">Last Week</th>
                     <th className="px-4 py-2 font-medium text-gray-500 text-right">Total</th>
                   </tr>
                 </thead>
@@ -232,6 +335,9 @@ export default function AnalyticsPage() {
                       <td className="px-4 py-2.5 text-gray-700">{info.email || uid}</td>
                       <td className="px-4 py-2.5 text-right font-medium text-gray-900">{info.views}</td>
                       <td className="px-4 py-2.5 text-right font-medium text-gray-900">{info.clicks}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-600">{info.lastHour}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-600">{info.lastDay}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-600">{info.lastWeek}</td>
                       <td className="px-4 py-2.5 text-right font-bold text-gray-900">{info.views + info.clicks}</td>
                     </tr>
                   ))}
@@ -262,6 +368,37 @@ export default function AnalyticsPage() {
                       <td className="px-4 py-2.5 text-gray-700">{row.email || "Anonymous"}</td>
                       <td className="px-4 py-2.5 text-gray-600 font-mono text-xs">{row.page}</td>
                       <td className="px-4 py-2.5 text-right font-bold text-gray-900">{row.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Last Active Users */}
+        {data.lastVisits && data.lastVisits.length > 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden mb-8">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-800">Last Active Users</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-left">
+                    <th className="px-4 py-2 font-medium text-gray-500">User</th>
+                    <th className="px-4 py-2 font-medium text-gray-500">Last Page</th>
+                    <th className="px-4 py-2 font-medium text-gray-500 text-right">Last Visit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {data.lastVisits.map((row) => (
+                    <tr key={row.uid}>
+                      <td className="px-4 py-2.5 text-gray-700">{row.email || row.uid}</td>
+                      <td className="px-4 py-2.5 text-gray-600 font-mono text-xs">{row.lastPage}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-900">
+                        {new Date(row.lastVisit).toLocaleString()}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
