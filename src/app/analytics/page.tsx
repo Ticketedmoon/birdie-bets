@@ -19,7 +19,7 @@ interface AnalyticsData {
   byType: Record<string, number>;
   byUser: Record<string, { email: string | null; views: number; clicks: number; lastHour: number; lastDay: number; lastWeek: number }>;
   byUserPage: { email: string | null; page: string; count: number }[];
-  recentEvents: Record<string, unknown>;
+  recentEvents: Record<string, unknown>[];
   lastVisits: { uid: string; email: string | null; lastPage: string; lastVisit: string }[];
 }
 
