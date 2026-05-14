@@ -73,7 +73,8 @@ export default function AnalyticsPage() {
         setError("Access denied — your account is not authorized to view analytics.");
         setData(null);
       } else if (!res.ok) {
-        setError("Failed to load analytics.");
+        const body = await res.json().catch(() => ({}));
+        setError(body.detail || body.error || "Failed to load analytics.");
       } else {
         setData(await res.json());
       }

@@ -89,8 +89,12 @@ export async function GET(request: NextRequest) {
       events = snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as Record<string, unknown>))
         .filter((e) => (e.timestamp as string) >= since);
-    } catch {
-      // Collection may not exist yet
+    } catch (queryError) {
+      console.error("Analytics query failed:", queryError);
+      return NextResponse.json(
+        { error: "Failed to query analytics", detail: String(queryError) },
+        { status: 500 }
+      );
     }
 
     // Build summary
