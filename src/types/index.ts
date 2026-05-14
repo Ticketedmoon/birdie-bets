@@ -170,6 +170,7 @@ export interface ESPNCompetitor {
   linescores?: {
     displayValue: string;
     period: number;
+    teeTime?: string;
   }[];
   athlete: {
     id: string;

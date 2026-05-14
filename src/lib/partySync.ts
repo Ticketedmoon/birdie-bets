@@ -1,5 +1,5 @@
 import { getParty, updatePartyStatus, updatePartyInvalidPicks, clearPartyInvalidPicks, updatePartyLastNotified, getUserEmail, getUsersInfo } from "@/lib/firestore";
-import { fetchTournamentStatus } from "@/lib/espn";
+import { fetchTournamentSnapshot } from "@/lib/espn";
 import { validatePartyPicks } from "@/lib/pickValidation";
 import type { Party } from "@/types";
 
@@ -20,7 +20,7 @@ const NOTIFICATION_COOLDOWN_MS = 1000 * 60 * 60; // 1 hour
  * Returns the updated party object.
  */
 export async function syncPartyStatus(party: Party): Promise<Party> {
-  const espnStatus = await fetchTournamentStatus(party.tournamentId);
+  const { status: espnStatus, firstTeeTime } = await fetchTournamentSnapshot(party.tournamentId);
 
   // locked → complete transition (no validation needed, picks already locked)
   if (party.status === "locked" && espnStatus === "post") {
@@ -28,34 +28,42 @@ export async function syncPartyStatus(party: Party): Promise<Party> {
     return { ...party, status: "complete" };
   }
 
-  // picking → locked/complete transition (validate picks first)
-  if (party.status === "picking" && (espnStatus === "in" || espnStatus === "post")) {
-    const validation = await validatePartyPicks(party);
+  // picking → locked/complete transition
+  // Triggers when: ESPN says "in" or "post", OR 1 hour before first tee time
+  if (party.status === "picking") {
+    const shouldLockByTeeTime =
+      espnStatus === "pre" &&
+      firstTeeTime &&
+      Date.now() >= Date.parse(firstTeeTime);
 
-    if (validation.valid) {
-      // All picks are valid — clear any previous invalid markers and lock
-      if (party.invalidPicks && party.invalidPicks.length > 0) {
-        await clearPartyInvalidPicks(party.id);
+    const shouldLockByEspn = espnStatus === "in" || espnStatus === "post";
+
+    if (shouldLockByEspn || shouldLockByTeeTime) {
+      const validation = await validatePartyPicks(party);
+
+      if (validation.valid) {
+        if (party.invalidPicks && party.invalidPicks.length > 0) {
+          await clearPartyInvalidPicks(party.id);
+        }
+        const newStatus = espnStatus === "post" ? "complete" : "locked";
+        await updatePartyStatus(party.id, newStatus);
+        return { ...party, status: newStatus, invalidPicks: [] };
       }
-      const newStatus = espnStatus === "post" ? "complete" : "locked";
-      await updatePartyStatus(party.id, newStatus);
-      return { ...party, status: newStatus, invalidPicks: [] };
+
+      // Invalid picks found — block the lock
+      await updatePartyInvalidPicks(party.id, validation.invalidPicks);
+
+      const shouldNotify =
+        !party.lastInvalidNotifiedAt ||
+        Date.now() - new Date(party.lastInvalidNotifiedAt).getTime() > NOTIFICATION_COOLDOWN_MS;
+
+      if (shouldNotify) {
+        await notifyInvalidPickMembers(party, validation.invalidPicks);
+        await updatePartyLastNotified(party.id);
+      }
+
+      return { ...party, invalidPicks: validation.invalidPicks };
     }
-
-    // Invalid picks found — block the lock
-    await updatePartyInvalidPicks(party.id, validation.invalidPicks);
-
-    // Send email notifications (rate-limited)
-    const shouldNotify =
-      !party.lastInvalidNotifiedAt ||
-      Date.now() - new Date(party.lastInvalidNotifiedAt).getTime() > NOTIFICATION_COOLDOWN_MS;
-
-    if (shouldNotify) {
-      await notifyInvalidPickMembers(party, validation.invalidPicks);
-      await updatePartyLastNotified(party.id);
-    }
-
-    return { ...party, invalidPicks: validation.invalidPicks };
   }
 
   return party;

@@ -100,12 +100,51 @@ export async function fetchLeaderboard(eventId: string): Promise<PlayerScore[]> 
  * Returns "pre" (not started), "in" (in progress), or "post" (finished).
  */
 export async function fetchTournamentStatus(eventId: string): Promise<"pre" | "in" | "post"> {
+  const snapshot = await fetchTournamentSnapshot(eventId);
+  return snapshot.status;
+}
+
+/**
+ * Fetch the first tee time for Round 1 of a tournament.
+ * Returns an ISO timestamp string, or null if tee times aren't available yet.
+ */
+export async function fetchFirstTeeTime(eventId: string): Promise<string | null> {
+  const snapshot = await fetchTournamentSnapshot(eventId);
+  return snapshot.firstTeeTime;
+}
+
+/**
+ * Shared helper that fetches tournament data once and extracts both status
+ * and the earliest Round 1 tee time from the ESPN leaderboard endpoint.
+ */
+export async function fetchTournamentSnapshot(eventId: string): Promise<{
+  status: "pre" | "in" | "post";
+  firstTeeTime: string | null;
+}> {
   const res = await fetch(`${ESPN_BASE}/leaderboard?event=${eventId}`);
-  if (!res.ok) return "pre";
+  if (!res.ok) return { status: "pre", firstTeeTime: null };
   const data = await res.json();
   const event = data.events?.[0];
-  if (!event) return "pre";
-  return (event.status?.type?.state as "pre" | "in" | "post") || "pre";
+  if (!event) return { status: "pre", firstTeeTime: null };
+
+  const status = (event.status?.type?.state as "pre" | "in" | "post") || "pre";
+
+  const competitors = event.competitions?.[0]?.competitors || [];
+  const r1TeeTimes: string[] = [];
+  for (const comp of competitors) {
+    const teeTime =
+      comp.linescores?.find((ls: { period: number; teeTime?: string }) => ls.period === 1)?.teeTime
+      ?? comp.status?.teeTime;
+    if (teeTime && !isNaN(Date.parse(teeTime))) {
+      r1TeeTimes.push(teeTime);
+    }
+  }
+
+  // ISO strings sort lexicographically = chronologically
+  r1TeeTimes.sort();
+  const firstTeeTime = r1TeeTimes[0] ?? null;
+
+  return { status, firstTeeTime };
 }
 
 export async function fetchPlayersFromLeaderboard(eventId: string): Promise<Player[]> {

@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { getParty, getAllPicksForParty, getUsersInfo, addInvites, deleteParty, leaveParty } from "@/lib/firestore";
-import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar } from "@/lib/espn";
+import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar, fetchFirstTeeTime } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
 import { calculatePayouts } from "@/lib/payouts";
 import Link from "next/link";
@@ -36,6 +36,7 @@ function PartyContent() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [tournamentCountdown, setTournamentCountdown] = useState("");
+  const [lockTime, setLockTime] = useState<number | null>(null);
   const [mobileView, setMobileView] = useState<"cards" | "table">("cards");
   const [unlockSending, setUnlockSending] = useState<Record<string, boolean>>({});
   const [unlockResult, setUnlockResult] = useState<Record<string, string>>({});
@@ -209,14 +210,31 @@ function PartyContent() {
     return () => clearInterval(interval);
   }, [party, loading]);
 
-  // Tournament start countdown (updates every minute)
+  // First tee-off countdown — fetches actual tee time from ESPN, falls back to tournament start date
   useEffect(() => {
     if (!party || party.status !== "picking") return;
 
+    let cancelled = false;
+
+    const init = async () => {
+      const teeTime = await fetchFirstTeeTime(party.tournamentId);
+      if (cancelled) return;
+
+      const teeOff = teeTime
+        ? Date.parse(teeTime)
+        : new Date(party.tournamentStartDate).getTime();
+      setLockTime(teeOff);
+    };
+
+    init();
+    return () => { cancelled = true; };
+  }, [party?.tournamentId, party?.status]);
+
+  useEffect(() => {
+    if (!party || party.status !== "picking" || lockTime === null) return;
+
     const updateCountdown = () => {
-      const start = new Date(party.tournamentStartDate).getTime();
-      const now = Date.now();
-      const diff = start - now;
+      const diff = lockTime - Date.now();
 
       if (diff <= 0) {
         setTournamentCountdown("");
@@ -237,7 +255,7 @@ function PartyContent() {
     updateCountdown();
     const interval = setInterval(updateCountdown, 60_000);
     return () => clearInterval(interval);
-  }, [party]);
+  }, [party?.status, lockTime]);
 
   const handleCopyInvite = () => {
     if (!party) return;
@@ -369,12 +387,12 @@ function PartyContent() {
           </p>
           {tournamentCountdown && party.status === "picking" && (
             <p className="mt-1 text-xs sm:text-sm font-medium text-amber-700">
-              ⏳ Tournament starts in {tournamentCountdown}
+              ⛳ First tee-off in {tournamentCountdown} — picks lock at tee-off
             </p>
           )}
           {!tournamentCountdown && party.status === "picking" && (
             <p className="mt-1 text-xs sm:text-sm font-medium text-blue-700">
-              🏌️ Play is about to begin — picks will lock automatically once the first round is underway.
+              🔒 First tee-off is imminent — picks are about to lock
             </p>
           )}
           {party.buyIn > 0 && (() => {
