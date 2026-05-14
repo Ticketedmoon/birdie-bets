@@ -88,6 +88,15 @@ export default function AnalyticsPage() {
     }
   }, [user, loading, days]);
 
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    if (!user?.email) return;
+    const interval = setInterval(() => {
+      fetchData(user.email!, days);
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [user?.email, days]);
+
   // Not signed in — show login
   if (!loading && !user) {
     return (
