@@ -36,6 +36,8 @@ function mapCompetitorToPlayerScore(comp: ESPNCompetitor): PlayerScore {
     roundScores: comp.linescores?.map((ls) => ls.displayValue),
     headshot: comp.athlete.headshot?.href,
     flagUrl: comp.athlete.flag?.href,
+    thru: comp.status.thru,
+    displayThru: comp.status.displayThru,
   };
 }
 
@@ -145,6 +147,43 @@ export async function fetchTournamentSnapshot(eventId: string): Promise<{
   const firstTeeTime = r1TeeTimes[0] ?? null;
 
   return { status, firstTeeTime };
+}
+
+/**
+ * Fetch the current round number for a tournament.
+ * Derives from competitor linescores — the highest period with a score
+ * across any competitor indicates the current round.
+ * Returns { currentRound, totalRounds } or null if not available.
+ */
+export async function fetchCurrentRound(eventId: string): Promise<{
+  currentRound: number;
+  totalRounds: number;
+} | null> {
+  const res = await fetch(`${ESPN_BASE}/leaderboard?event=${eventId}`);
+  if (!res.ok) return null;
+  const data = await res.json();
+  const event = data.events?.[0];
+  if (!event) return null;
+
+  const competitors = event.competitions?.[0]?.competitors || [];
+  if (competitors.length === 0) return null;
+
+  let maxPeriod = 0;
+  let totalRounds = 4; // default for standard PGA events
+
+  for (const comp of competitors) {
+    if (!comp.linescores) continue;
+    for (const ls of comp.linescores) {
+      // Only count rounds with an actual score (not empty or "-")
+      const hasScore = ls.displayValue && ls.displayValue !== "-" && ls.displayValue.trim() !== "";
+      if (hasScore && ls.period > maxPeriod) maxPeriod = ls.period;
+      if (ls.period > totalRounds) totalRounds = ls.period;
+    }
+  }
+
+  if (maxPeriod === 0) return null;
+
+  return { currentRound: maxPeriod, totalRounds };
 }
 
 export async function fetchPlayersFromLeaderboard(eventId: string): Promise<Player[]> {

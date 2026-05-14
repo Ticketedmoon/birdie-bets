@@ -21,6 +21,8 @@ export interface PlayerScore {
   roundScores?: string[];
   headshot?: string;
   flagUrl?: string;
+  thru?: number;
+  displayThru?: string;
 }
 
 export type PlayerGroup = "A" | "B" | "C" | "D";
@@ -114,6 +116,7 @@ export interface LeaderboardEntry {
     displayScore: string;
     status: "playing" | "finished" | "cut" | "wd" | "dq";
     headshot?: string;
+    displayThru?: string;
   }[];
   totalScore: number;
   displayTotal: string;

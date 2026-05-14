@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Navbar } from "@/components/Navbar";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { getParty, getAllPicksForParty, getUsersInfo, addInvites, deleteParty, leaveParty } from "@/lib/firestore";
-import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar, fetchFirstTeeTime } from "@/lib/espn";
+import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar, fetchFirstTeeTime, fetchCurrentRound } from "@/lib/espn";
 import { syncPartyStatus } from "@/lib/partySync";
 import { calculatePayouts } from "@/lib/payouts";
 import Link from "next/link";
@@ -40,6 +40,7 @@ function PartyContent() {
   const [mobileView, setMobileView] = useState<"cards" | "table">("cards");
   const [unlockSending, setUnlockSending] = useState<Record<string, boolean>>({});
   const [unlockResult, setUnlockResult] = useState<Record<string, string>>({});
+  const [currentRound, setCurrentRound] = useState<{ currentRound: number; totalRounds: number } | null>(null);
 
   const AUTO_REFRESH_SECONDS = 300;
 
@@ -132,6 +133,7 @@ function PartyContent() {
           displayScore: displayParts.join(" "),
           status: score.status,
           headshot: score.headshot,
+          displayThru: score.displayThru,
         };
       });
 
@@ -165,6 +167,10 @@ function PartyContent() {
         setParty(synced);
         const lb = await buildLeaderboard(synced);
         setLeaderboard(lb);
+        // Fetch current round info when tournament is in progress or complete
+        if (synced.status === "locked" || synced.status === "complete") {
+          fetchCurrentRound(synced.tournamentId).then(setCurrentRound).catch(() => {});
+        }
         setLastRefreshed(new Date());
         setCountdown(AUTO_REFRESH_SECONDS);
         setLoading(false);
@@ -184,6 +190,9 @@ function PartyContent() {
       setParty(synced);
       const lb = await buildLeaderboard(synced);
       setLeaderboard(lb);
+      if (synced.status === "locked" || synced.status === "complete") {
+        fetchCurrentRound(synced.tournamentId).then(setCurrentRound).catch(() => {});
+      }
       setLastRefreshed(new Date());
       setCountdown(AUTO_REFRESH_SECONDS);
     } catch (err) {
@@ -455,6 +464,14 @@ function PartyContent() {
         </div>
       </div>
 
+      {currentRound && (party.status === "locked" || party.status === "complete") && (
+        <div className="mb-6">
+          <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-5 py-2 text-sm sm:text-base font-semibold text-green-800 shadow-sm">
+            ⛳ Round {currentRound.currentRound} of {currentRound.totalRounds}
+          </span>
+        </div>
+      )}
+
       {showInviteForm && party && (
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-gray-800 mb-3">Invite more people</h3>
@@ -681,7 +698,7 @@ function PartyContent() {
                   <div className="shrink-0 text-right">
                     {showPicks ? (
                       <span className={`text-lg font-bold ${
-                        entry.totalScore < 0 ? "text-red-600" : entry.totalScore > 0 ? "text-gray-800" : "text-gray-500"
+                        entry.totalScore < 0 ? "text-red-600" : entry.totalScore > 0 ? "text-blue-600" : "text-gray-500"
                       }`}>
                         {entry.displayTotal}
                       </span>
@@ -709,8 +726,18 @@ function PartyContent() {
                           }`}>
                             {pick.playerName}
                           </span>
+                          {!isCut && pick.displayThru && pick.status === "playing" && (
+                            <span className="shrink-0 text-[10px] font-medium text-gray-400">
+                              Thru {pick.displayThru}
+                            </span>
+                          )}
+                          {!isCut && pick.status === "finished" && (
+                            <span className="shrink-0 text-[10px] font-medium text-green-600">
+                              F
+                            </span>
+                          )}
                           <span className={`shrink-0 text-sm font-bold ${
-                            isCut ? "text-red-700" : pick.scoreToPar < 0 ? "text-red-600" : pick.scoreToPar > 0 ? "text-gray-700" : "text-gray-500"
+                            isCut ? "text-red-700" : pick.scoreToPar < 0 ? "text-red-600" : pick.scoreToPar > 0 ? "text-blue-600" : "text-gray-500"
                           }`}>
                             {pick.displayScore}
                           </span>
@@ -877,12 +904,22 @@ function PartyContent() {
                                 : pick.scoreToPar < 0
                                 ? "text-red-600"
                                 : pick.scoreToPar > 0
-                                ? "text-gray-700"
+                                ? "text-blue-600"
                                 : "text-gray-500"
                             }`}
                           >
                             {pick.displayScore}
                           </span>
+                          {!isCut && pick.displayThru && pick.status === "playing" && (
+                            <span className="text-[10px] font-medium text-gray-400">
+                              Thru {pick.displayThru}
+                            </span>
+                          )}
+                          {!isCut && pick.status === "finished" && (
+                            <span className="text-[10px] font-medium text-green-600">
+                              F
+                            </span>
+                          )}
                           {isCut && (
                             <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
                               🔒 CUT
@@ -899,7 +936,7 @@ function PartyContent() {
                           entry.totalScore < 0
                             ? "text-red-600"
                             : entry.totalScore > 0
-                            ? "text-gray-800"
+                            ? "text-blue-600"
                             : "text-gray-500"
                         }`}
                       >

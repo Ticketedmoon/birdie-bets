@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { calculateEffectiveScore, formatScoreToPar, fetchLeaderboard, fetchTournamentSnapshot, fetchTournamentStatus, fetchFirstTeeTime, fetchCurrentTournaments, fetchPlayersFromLeaderboard, fetchTournamentSchedule, fetchDynamicGroups } from "@/lib/espn";
+import { calculateEffectiveScore, formatScoreToPar, fetchLeaderboard, fetchTournamentSnapshot, fetchTournamentStatus, fetchFirstTeeTime, fetchCurrentTournaments, fetchPlayersFromLeaderboard, fetchTournamentSchedule, fetchDynamicGroups, fetchCurrentRound } from "@/lib/espn";
 import type { PlayerScore } from "@/types";
 
 function makePlayerScore(overrides: Partial<PlayerScore> = {}): PlayerScore {
@@ -717,5 +717,205 @@ describe("ESPN mapping edge cases", () => {
 
     const result = await fetchPlayersFromLeaderboard("evt1");
     expect(result).toEqual([]);
+  });
+});
+
+describe("fetchLeaderboard — thru/displayThru mapping", () => {
+  let originalFetch: typeof global.fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("maps thru and displayThru from competitor status", async () => {
+    const comp = makeESPNCompetitor({
+      status: {
+        type: { name: "STATUS_ACTIVE", state: "in" },
+        position: { displayName: "5" },
+        thru: 12,
+        displayThru: "12",
+      },
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchLeaderboard("evt1");
+    expect(result[0].thru).toBe(12);
+    expect(result[0].displayThru).toBe("12");
+  });
+
+  it("maps displayThru as 'F' for finished players", async () => {
+    const comp = makeESPNCompetitor({
+      status: {
+        type: { name: "STATUS_FINISH", state: "post" },
+        position: { displayName: "T1" },
+        thru: 18,
+        displayThru: "F",
+      },
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchLeaderboard("evt1");
+    expect(result[0].thru).toBe(18);
+    expect(result[0].displayThru).toBe("F");
+    expect(result[0].status).toBe("finished");
+  });
+
+  it("leaves thru/displayThru undefined when not present", async () => {
+    const comp = makeESPNCompetitor({
+      status: {
+        type: { name: "STATUS_ACTIVE", state: "in" },
+        position: { displayName: "10" },
+      },
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchLeaderboard("evt1");
+    expect(result[0].thru).toBeUndefined();
+    expect(result[0].displayThru).toBeUndefined();
+  });
+});
+
+describe("fetchCurrentRound", () => {
+  let originalFetch: typeof global.fetch;
+
+  beforeEach(() => {
+    originalFetch = global.fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("returns current round from competitor linescores", async () => {
+    const comp1 = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "70", period: 1 },
+        { displayValue: "68", period: 2 },
+      ],
+    });
+    const comp2 = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "72", period: 1 },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp1, comp2] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toEqual({ currentRound: 2, totalRounds: 4 });
+  });
+
+  it("returns round 4 of 4 for final round", async () => {
+    const comp = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "70", period: 1 },
+        { displayValue: "68", period: 2 },
+        { displayValue: "71", period: 3 },
+        { displayValue: "69", period: 4 },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toEqual({ currentRound: 4, totalRounds: 4 });
+  });
+
+  it("returns null on API error", async () => {
+    global.fetch = mockFetchResponse({}, false);
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when no events", async () => {
+    global.fetch = mockFetchResponse({ events: [] });
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when no competitors", async () => {
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [] }] })],
+    });
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when no linescores on any competitor", async () => {
+    const comp = makeESPNCompetitor({ linescores: undefined });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toBeNull();
+  });
+
+  it("handles playoff round (period > 4)", async () => {
+    const comp = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "70", period: 1 },
+        { displayValue: "68", period: 2 },
+        { displayValue: "71", period: 3 },
+        { displayValue: "69", period: 4 },
+        { displayValue: "68", period: 5 },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toEqual({ currentRound: 5, totalRounds: 5 });
+  });
+
+  it("ignores linescores with empty or dash displayValue (ESPN pre-populates future rounds)", async () => {
+    // Mirrors real ESPN data on Day 1: period 2 exists but has empty/dash displayValue
+    const comp1 = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "-1", period: 1 },
+        { displayValue: "", period: 2 },
+      ],
+    });
+    const comp2 = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "-", period: 1 },
+        { displayValue: "", period: 2 },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp1, comp2] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    // Only comp1 has a real score in period 1 ("-1" is a valid score)
+    // Period 2 has no real scores, so currentRound should be 1
+    expect(result).toEqual({ currentRound: 1, totalRounds: 4 });
+  });
+
+  it("returns null when all linescores have empty/dash values", async () => {
+    const comp = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "-", period: 1 },
+        { displayValue: "", period: 2 },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toBeNull();
   });
 });
