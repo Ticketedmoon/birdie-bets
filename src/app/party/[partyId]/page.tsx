@@ -367,9 +367,14 @@ function PartyContent() {
             {party.tournamentName} • {party.memberUids.length} member
             {party.memberUids.length !== 1 ? "s" : ""}
           </p>
-          {tournamentCountdown && (
+          {tournamentCountdown && party.status === "picking" && (
             <p className="mt-1 text-xs sm:text-sm font-medium text-amber-700">
               ⏳ Tournament starts in {tournamentCountdown}
+            </p>
+          )}
+          {!tournamentCountdown && party.status === "picking" && (
+            <p className="mt-1 text-xs sm:text-sm font-medium text-blue-700">
+              🏌️ Play is about to begin — picks will lock automatically once the first round is underway.
             </p>
           )}
           {party.buyIn > 0 && (() => {
