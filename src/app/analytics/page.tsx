@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { getFirebaseDb } from "@/lib/firebase";
 
@@ -62,11 +62,27 @@ export default function AnalyticsPage() {
   const [error, setError] = useState("");
   const [fetching, setFetching] = useState(false);
   const [days, setDays] = useState(7);
-  const REFRESH_SECONDS = 5 * 60;
-  const [secondsLeft, setSecondsLeft] = useState(REFRESH_SECONDS);
-  const secondsRef = useRef(REFRESH_SECONDS);
 
-  const fetchData = async (email: string, numDays: number) => {
+  const cacheKey = (numDays: number) => `analytics_cache_${numDays}`;
+
+  const fetchData = async (email: string, numDays: number, bypassCache = false) => {
+    // Try sessionStorage cache first
+    if (!bypassCache) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey(numDays));
+        if (cached) {
+          const { data: cachedData, timestamp } = JSON.parse(cached);
+          const cacheAge = Date.now() - timestamp;
+          if (cacheAge < 10 * 60 * 1000) {
+            setData(cachedData);
+            return;
+          }
+        }
+      } catch {
+        // Ignore cache errors
+      }
+    }
+
     setFetching(true);
     setError("");
 
@@ -156,7 +172,7 @@ export default function AnalyticsPage() {
         lastVisit: (d.data().lastVisit as string) || "",
       }));
 
-      setData({
+      const result: AnalyticsData = {
         totalViews: events.length,
         uniqueUsers: Object.keys(byUser).length,
         days: numDays,
@@ -171,7 +187,15 @@ export default function AnalyticsPage() {
         byUserPage: Object.values(userPageMap).sort((a, b) => b.count - a.count),
         recentEvents: events.slice(0, 50),
         lastVisits,
-      });
+      };
+
+      setData(result);
+
+      try {
+        sessionStorage.setItem(cacheKey(numDays), JSON.stringify({ data: result, timestamp: Date.now() }));
+      } catch {
+        // Storage full or unavailable — ignore
+      }
     } catch (err) {
       console.error("Analytics fetch error:", err);
       setError("Failed to load analytics: " + String(err));
@@ -184,23 +208,6 @@ export default function AnalyticsPage() {
       fetchData(user.email, days);
     }
   }, [user, loading, days]);
-
-  // Countdown timer with auto-refresh every 5 minutes
-  useEffect(() => {
-    if (!user?.email) return;
-    secondsRef.current = REFRESH_SECONDS;
-    setSecondsLeft(REFRESH_SECONDS);
-    const tick = setInterval(() => {
-      secondsRef.current -= 1;
-      setSecondsLeft(secondsRef.current);
-      if (secondsRef.current <= 0) {
-        fetchData(user.email!, days);
-        secondsRef.current = REFRESH_SECONDS;
-        setSecondsLeft(REFRESH_SECONDS);
-      }
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [user?.email, days]);
 
   // Not signed in — show login
   if (!loading && !user) {
@@ -282,9 +289,13 @@ export default function AnalyticsPage() {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-400">
-              Auto-refresh in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
-            </p>
+            <button
+              onClick={() => user?.email && fetchData(user.email, days, true)}
+              disabled={fetching}
+              className="text-xs font-medium text-green-700 hover:text-green-600 transition-colors disabled:text-gray-400"
+            >
+              {fetching ? "Refreshing…" : "↻ Refresh"}
+            </button>
           </div>
         </div>
 

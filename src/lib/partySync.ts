@@ -1,4 +1,4 @@
-import { getParty, updatePartyStatus, updatePartyInvalidPicks, clearPartyInvalidPicks, updatePartyLastNotified, getUserEmail, getUsersInfo } from "@/lib/firestore";
+import { getParty, updatePartyStatus, updatePartyInvalidPicks, clearPartyInvalidPicks, updatePartyLastNotified, getUserEmail, getUsersInfo, compactAnalytics } from "@/lib/firestore";
 import { fetchTournamentSnapshot } from "@/lib/espn";
 import { validatePartyPicks } from "@/lib/pickValidation";
 import type { Party } from "@/types";
@@ -25,6 +25,7 @@ export async function syncPartyStatus(party: Party): Promise<Party> {
   // locked → complete transition (no validation needed, picks already locked)
   if (party.status === "locked" && espnStatus === "post") {
     await updatePartyStatus(party.id, "complete");
+    compactAnalytics(party).catch((err) => console.error("Analytics compaction failed:", err));
     return { ...party, status: "complete" };
   }
 
@@ -47,6 +48,9 @@ export async function syncPartyStatus(party: Party): Promise<Party> {
         }
         const newStatus = espnStatus === "post" ? "complete" : "locked";
         await updatePartyStatus(party.id, newStatus);
+        if (newStatus === "complete") {
+          compactAnalytics(party).catch((err) => console.error("Analytics compaction failed:", err));
+        }
         return { ...party, status: newStatus, invalidPicks: [] };
       }
 

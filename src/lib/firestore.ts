@@ -297,3 +297,78 @@ export async function getUsersInfo(
   }
   return result;
 }
+
+/**
+ * Compact granular analytics events into a single summary document
+ * per party/tournament, then delete the individual event docs.
+ *
+ * Called when a party transitions to "complete". Uses the party's
+ * creation date to scope which events to compact.
+ */
+export async function compactAnalytics(party: Party): Promise<void> {
+  const analyticsRef = collection(db(), "analytics");
+  const snap = await getDocs(analyticsRef);
+
+  if (snap.empty) return;
+
+  const partyStart = party.createdAt;
+  const now = new Date().toISOString();
+
+  // Filter events that fall within this party's lifetime
+  const events = snap.docs.filter((d) => {
+    const ts = d.data().timestamp as string;
+    return ts >= partyStart && ts <= now;
+  });
+
+  if (events.length === 0) return;
+
+  // Build the summary
+  const byPage: Record<string, number> = {};
+  const byBrowser: Record<string, number> = {};
+  const byUser: Record<string, { email: string | null; views: number; clicks: number }> = {};
+
+  for (const d of events) {
+    const e = d.data();
+    const page = (e.page as string) || "unknown";
+    const browser = (e.browser as string) || "unknown";
+    const type = (e.type as string) || "page_view";
+    const uid = e.uid as string | null;
+    const email = e.email as string | null;
+
+    byPage[page] = (byPage[page] || 0) + 1;
+    byBrowser[browser] = (byBrowser[browser] || 0) + 1;
+
+    if (uid) {
+      if (!byUser[uid]) byUser[uid] = { email: null, views: 0, clicks: 0 };
+      if (email) byUser[uid].email = email;
+      if (type === "click") byUser[uid].clicks++;
+      else byUser[uid].views++;
+    }
+  }
+
+  // Write the compacted summary
+  await setDoc(doc(db(), "analytics_compacted", party.id), {
+    partyId: party.id,
+    partyName: party.name,
+    tournamentId: party.tournamentId,
+    tournamentName: party.tournamentName,
+    totalEvents: events.length,
+    byPage,
+    byBrowser,
+    byUser,
+    periodStart: partyStart,
+    periodEnd: now,
+    compactedAt: now,
+  });
+
+  // Delete the individual event docs in batches of 500 (Firestore limit)
+  const batchSize = 500;
+  for (let i = 0; i < events.length; i += batchSize) {
+    const batch = writeBatch(db());
+    const chunk = events.slice(i, i + batchSize);
+    for (const d of chunk) {
+      batch.delete(d.ref);
+    }
+    await batch.commit();
+  }
+}
