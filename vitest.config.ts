@@ -5,6 +5,17 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    coverage: {
+      provider: "v8",
+      include: ["src/lib/**/*.ts"],
+      exclude: ["src/lib/firebase.ts", "src/lib/firestore.ts"],
+      thresholds: {
+        lines: 90,
+        branches: 90,
+        functions: 90,
+        statements: 90,
+      },
+    },
   },
   resolve: {
     alias: {
