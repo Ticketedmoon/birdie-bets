@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface AnalyticsData {
   totalViews: number;
@@ -56,6 +56,9 @@ export default function AnalyticsPage() {
   const [error, setError] = useState("");
   const [fetching, setFetching] = useState(false);
   const [days, setDays] = useState(7);
+  const REFRESH_SECONDS = 5 * 60;
+  const [secondsLeft, setSecondsLeft] = useState(REFRESH_SECONDS);
+  const secondsRef = useRef(REFRESH_SECONDS);
 
   const fetchData = async (email: string, numDays: number) => {
     setFetching(true);
@@ -88,13 +91,21 @@ export default function AnalyticsPage() {
     }
   }, [user, loading, days]);
 
-  // Auto-refresh every 5 minutes
+  // Countdown timer with auto-refresh every 5 minutes
   useEffect(() => {
     if (!user?.email) return;
-    const interval = setInterval(() => {
-      fetchData(user.email!, days);
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    secondsRef.current = REFRESH_SECONDS;
+    setSecondsLeft(REFRESH_SECONDS);
+    const tick = setInterval(() => {
+      secondsRef.current -= 1;
+      setSecondsLeft(secondsRef.current);
+      if (secondsRef.current <= 0) {
+        fetchData(user.email!, days);
+        secondsRef.current = REFRESH_SECONDS;
+        setSecondsLeft(REFRESH_SECONDS);
+      }
+    }, 1000);
+    return () => clearInterval(tick);
   }, [user?.email, days]);
 
   // Not signed in — show login
@@ -163,18 +174,23 @@ export default function AnalyticsPage() {
             <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">📊 Analytics</h1>
             <p className="text-sm text-gray-500 mt-1">Last {data.days} days</p>
           </div>
-          <div className="flex items-center gap-2">
-            {[7, 14, 30].map((d) => (
-              <button
-                key={d}
-                onClick={() => setDays(d)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  days === d ? "bg-green-700 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                {d}d
-              </button>
-            ))}
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              {[7, 14, 30].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDays(d)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    days === d ? "bg-green-700 text-white" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400">
+              Auto-refresh in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
+            </p>
           </div>
         </div>
 
