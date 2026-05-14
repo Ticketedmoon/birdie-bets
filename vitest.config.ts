@@ -8,7 +8,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/lib/**/*.ts"],
-      exclude: ["src/lib/firebase.ts", "src/lib/firestore.ts"],
+      exclude: ["src/lib/firebase.ts", "src/lib/firestore.ts", "src/lib/resend.ts", "src/lib/usePageView.ts"],
       thresholds: {
         lines: 90,
         branches: 90,

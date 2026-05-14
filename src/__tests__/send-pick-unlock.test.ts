@@ -12,11 +12,20 @@ vi.mock("@/lib/firestore", () => ({
   createPickUnlock: vi.fn(),
 }));
 
-// Mock Resend
-vi.mock("resend", () => ({
-  Resend: vi.fn().mockImplementation(() => ({
+// Mock Resend via shared helper
+vi.mock("@/lib/resend", () => ({
+  getResend: vi.fn().mockReturnValue({
     emails: { send: vi.fn().mockResolvedValue({ id: "email-id" }) },
-  })),
+  }),
+  getFromEmail: vi.fn().mockReturnValue("test@example.com"),
+}));
+
+// Mock email templates
+vi.mock("@/lib/emailTemplates", () => ({
+  buildUnlockEmail: vi.fn().mockReturnValue({
+    subject: "Test subject",
+    html: "<p>Test html</p>",
+  }),
 }));
 
 import { POST } from "@/app/api/send-pick-unlock/route";

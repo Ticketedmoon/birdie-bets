@@ -1,7 +1,13 @@
 "use client";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import { usePageView } from "@/lib/usePageView";
 import { ReactNode, useEffect, useState } from "react";
+
+function Analytics() {
+  usePageView();
+  return null;
+}
 
 export function Providers({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -19,5 +25,10 @@ export function Providers({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      <Analytics />
+      {children}
+    </AuthProvider>
+  );
 }

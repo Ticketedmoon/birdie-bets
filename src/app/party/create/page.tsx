@@ -93,25 +93,25 @@ function CreatePartyContent() {
 
       // Build custom groups for Firestore (just id + displayName)
       // Always snapshot groups + wildcards so they don't shift with OWGR rankings
-      let groupsForFirestore: Party["customGroups"];
-      let wildcardsForFirestore: Party["snapshotWildcards"];
+      const toSnapshot = (players: Player[]) =>
+        players.map((p) => ({ id: p.id, displayName: p.displayName }));
 
+      const dynamicData = await fetchDynamicGroups(tournament.id);
+      const sourceGroups = customGroups || dynamicData.groups;
+
+      const groupsForFirestore: Party["customGroups"] = {
+        A: toSnapshot(sourceGroups.A),
+        B: toSnapshot(sourceGroups.B),
+        C: toSnapshot(sourceGroups.C),
+        D: toSnapshot(sourceGroups.D),
+      };
+
+      let wildcardsForFirestore: Party["snapshotWildcards"];
       if (customGroups) {
-        // User manually customised groups
-        groupsForFirestore = {
-          A: customGroups.A.map((p) => ({ id: p.id, displayName: p.displayName })),
-          B: customGroups.B.map((p) => ({ id: p.id, displayName: p.displayName })),
-          C: customGroups.C.map((p) => ({ id: p.id, displayName: p.displayName })),
-          D: customGroups.D.map((p) => ({ id: p.id, displayName: p.displayName })),
-        };
-        // Fetch wildcards: all eligible players minus the custom group players
-        const dynamicData = await fetchDynamicGroups(tournament.id);
-        const groupedIds = new Set([
-          ...groupsForFirestore.A.map((p) => p.id),
-          ...groupsForFirestore.B.map((p) => p.id),
-          ...groupsForFirestore.C.map((p) => p.id),
-          ...groupsForFirestore.D.map((p) => p.id),
-        ]);
+        // Wildcards = all players not in the custom groups
+        const groupedIds = new Set(
+          Object.values(groupsForFirestore).flatMap((g) => g.map((p) => p.id))
+        );
         const allPlayers = [
           ...dynamicData.groups.A, ...dynamicData.groups.B,
           ...dynamicData.groups.C, ...dynamicData.groups.D,
@@ -121,18 +121,7 @@ function CreatePartyContent() {
           .filter((p) => !groupedIds.has(p.id))
           .map((p) => ({ id: p.id, displayName: p.displayName }));
       } else {
-        // No manual customisation — snapshot current OWGR-based groups
-        const dynamicData = await fetchDynamicGroups(tournament.id);
-        groupsForFirestore = {
-          A: dynamicData.groups.A.map((p) => ({ id: p.id, displayName: p.displayName })),
-          B: dynamicData.groups.B.map((p) => ({ id: p.id, displayName: p.displayName })),
-          C: dynamicData.groups.C.map((p) => ({ id: p.id, displayName: p.displayName })),
-          D: dynamicData.groups.D.map((p) => ({ id: p.id, displayName: p.displayName })),
-        };
-        wildcardsForFirestore = dynamicData.wildcards.map((p) => ({
-          id: p.id,
-          displayName: p.displayName,
-        }));
+        wildcardsForFirestore = toSnapshot(dynamicData.wildcards);
       }
 
       const party = await createParty(

@@ -1,17 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
-import { Navbar } from "@/components/Navbar";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { getParty, getAllPicksForParty, getUsersInfo, addInvites, deleteParty, leaveParty } from "@/lib/firestore";
-import { fetchLeaderboard, calculateEffectiveScore, formatScoreToPar, fetchFirstTeeTime, fetchCurrentRound } from "@/lib/espn";
-import { syncPartyStatus } from "@/lib/partySync";
-import { calculatePayouts } from "@/lib/payouts";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { Suspense } from "react";
-import type { Party, Picks, PlayerScore, LeaderboardEntry } from "@/types";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Navbar } from "@/components/Navbar";
+import { LeaderboardCards } from "@/components/party/LeaderboardCards";
+import { LeaderboardTable } from "@/components/party/LeaderboardTable";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  AUTO_REFRESH_SECONDS,
+  COPY_FEEDBACK_MS,
+  COUNTDOWN_TICK_MS,
+  EMAIL_BANNER_MS,
+  INVITE_RESULT_MS,
+} from "@/lib/constants";
+import { fetchFirstTeeTime, fetchCurrentRound, fetchLeaderboard } from "@/lib/espn";
+import { addInvites, deleteParty, getAllPicksForParty, getParty, getUsersInfo, leaveParty } from "@/lib/firestore";
+import { buildLeaderboardEntries } from "@/lib/leaderboard";
+import { calculatePayouts } from "@/lib/payouts";
+import { syncPartyStatus } from "@/lib/partySync";
+import type { LeaderboardEntry, Party, PlayerScore } from "@/types";
 
 function PartyContent() {
   const { partyId } = useParams<{ partyId: string }>();
@@ -25,7 +34,7 @@ function PartyContent() {
   const [error, setError] = useState("");
   const [inviteCopied, setInviteCopied] = useState(false);
   const [emailBanner, setEmailBanner] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(300);
+  const [countdown, setCountdown] = useState(AUTO_REFRESH_SECONDS);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmails, setInviteEmails] = useState("");
@@ -42,8 +51,6 @@ function PartyContent() {
   const [unlockResult, setUnlockResult] = useState<Record<string, string>>({});
   const [currentRound, setCurrentRound] = useState<{ currentRound: number; totalRounds: number } | null>(null);
 
-  const AUTO_REFRESH_SECONDS = 300;
-
   // Show email send results from create flow
   useEffect(() => {
     const sent = searchParams.get("emailsSent");
@@ -55,8 +62,7 @@ function PartyContent() {
       } else {
         setEmailBanner(`📧 ${sent} invite email(s) sent successfully!`);
       }
-      // Clear after 8 seconds
-      setTimeout(() => setEmailBanner(null), 8000);
+      setTimeout(() => setEmailBanner(null), EMAIL_BANNER_MS);
     }
   }, [searchParams]);
 
@@ -67,89 +73,7 @@ function PartyContent() {
       fetchLeaderboard(partyData.tournamentId).catch(() => [] as PlayerScore[]),
     ]);
 
-    // Build lookup maps by both ID and normalized name (OWGR IDs don't match ESPN IDs)
-    const scoreByIdMap = new Map<string, PlayerScore>();
-    const scoreByNameMap = new Map<string, PlayerScore>();
-    scores.forEach((s) => {
-      scoreByIdMap.set(s.playerId, s);
-      scoreByNameMap.set(s.playerName.toLowerCase(), s);
-    });
-
-    const findScore = (playerId: string, playerName: string): PlayerScore | undefined => {
-      return scoreByIdMap.get(playerId) || scoreByNameMap.get(playerName.toLowerCase());
-    };
-
-    const entries: LeaderboardEntry[] = partyData.memberUids.map((uid) => {
-      const picks = allPicks[uid];
-      const userInfo = usersInfo[uid] || { displayName: "Unknown" };
-
-      const pickSlots = picks
-        ? [
-            { group: "A", ...picks.groupA },
-            { group: "B", ...picks.groupB },
-            { group: "C", ...picks.groupC },
-            { group: "D", ...picks.groupD },
-            { group: "W1", ...picks.wildcard1 },
-            { group: "W2", ...picks.wildcard2 },
-          ]
-        : [];
-
-      let totalScore = 0;
-      const resolvedPicks = pickSlots.map((pick) => {
-        if (!pick.playerId) {
-          return {
-            group: pick.group,
-            playerId: "",
-            playerName: "Not picked",
-            scoreToPar: 0,
-            displayScore: "-",
-            status: "playing" as const,
-          };
-        }
-
-        const score = findScore(pick.playerId, pick.playerName || "");
-        if (!score) {
-          return {
-            group: pick.group,
-            playerId: pick.playerId,
-            playerName: pick.playerName || "Unknown",
-            scoreToPar: 0,
-            displayScore: "-",
-            status: "playing" as const,
-          };
-        }
-
-        const { effectiveScore, penalty } = calculateEffectiveScore(score);
-        totalScore += effectiveScore;
-
-        const displayParts = [formatScoreToPar(score.scoreToPar)];
-        if (penalty > 0) displayParts.push(`(+${penalty})`);
-
-        return {
-          group: pick.group,
-          playerId: pick.playerId,
-          playerName: score.playerName,
-          scoreToPar: effectiveScore,
-          displayScore: displayParts.join(" "),
-          status: score.status,
-          headshot: score.headshot,
-          displayThru: score.displayThru,
-        };
-      });
-
-      return {
-        userName: userInfo.displayName,
-        userPhotoURL: userInfo.photoURL,
-        uid,
-        picks: resolvedPicks,
-        totalScore,
-        displayTotal: formatScoreToPar(totalScore),
-      };
-    });
-
-    // Sort by total score (lowest is best in golf)
-    entries.sort((a, b) => a.totalScore - b.totalScore);
-    return entries;
+    return buildLeaderboardEntries(partyData, allPicks, usersInfo, scores);
   };
 
   useEffect(() => {
@@ -262,7 +186,7 @@ function PartyContent() {
     };
 
     updateCountdown();
-    const interval = setInterval(updateCountdown, 60_000);
+    const interval = setInterval(updateCountdown, COUNTDOWN_TICK_MS);
     return () => clearInterval(interval);
   }, [party?.status, lockTime]);
 
@@ -271,7 +195,7 @@ function PartyContent() {
     const url = `${window.location.origin}/party/join?code=${party.inviteCode}`;
     navigator.clipboard.writeText(url);
     setInviteCopied(true);
-    setTimeout(() => setInviteCopied(false), 2000);
+    setTimeout(() => setInviteCopied(false), COPY_FEEDBACK_MS);
   };
 
   const handleInviteMore = async () => {
@@ -309,7 +233,7 @@ function PartyContent() {
       setTimeout(() => {
         setInviteResult(null);
         setShowInviteForm(false);
-      }, 3000);
+      }, INVITE_RESULT_MS);
     } catch {
       setInviteResult("Failed to send invites — but invite code still works.");
     }
@@ -650,308 +574,28 @@ function PartyContent() {
 
         {/* Mobile card layout */}
         <div className={`space-y-3 ${mobileView === "cards" ? "sm:hidden" : "hidden"}`}>
-          {leaderboard.map((entry, idx) => {
-            const isOwnRow = entry.uid === user?.uid;
-            const showPicks = picksRevealed || isOwnRow;
-            const hasSubmitted = entry.picks.some((p) => p.playerId);
-            const pickLabels = ["A", "B", "C", "D", "W1", "W2"];
-            return (
-              <div
-                key={entry.uid}
-                className={`rounded-xl border-2 overflow-hidden ${
-                  isOwnRow ? "border-green-300 bg-green-50" : "border-gray-200 bg-white"
-                }`}
-              >
-                {/* Card header */}
-                <div className="flex items-center gap-2.5 px-3.5 py-2.5 border-b border-gray-100">
-                  <span className="text-sm font-bold text-gray-400 w-6 text-center shrink-0">
-                    {idx === 0 ? "🏆" : idx === 1 && party.secondPlacePayout ? "🥈" : idx === 2 && party.thirdPlacePayout ? "🥉" : idx + 1}
-                  </span>
-                  {entry.userPhotoURL && (
-                    <img src={entry.userPhotoURL} alt="" className="h-7 w-7 shrink-0 rounded-full" referrerPolicy="no-referrer" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <span className="truncate font-semibold text-sm text-gray-900">
-                      {entry.userName}
-                      {isOwnRow && <span className="text-green-600 text-xs ml-1">(you)</span>}
-                    </span>
-                    {!showPicks && (
-                      <span className={`ml-2 text-xs ${hasSubmitted ? "text-green-600" : "text-gray-400"}`}>
-                        {hasSubmitted ? "✓ Submitted" : "Waiting..."}
-                      </span>
-                    )}
-                    {!isOwnRow && !hasSubmitted && user?.uid === party.createdBy && party.status === "locked" && (
-                      <div className="ml-2 flex items-center gap-1.5">
-                        <button
-                          onClick={() => handleSendUnlock(entry.uid)}
-                          disabled={unlockSending[entry.uid]}
-                          className="inline-flex items-center rounded-md bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700 hover:bg-purple-200 transition-colors disabled:opacity-50"
-                        >
-                          {unlockSending[entry.uid] ? "Sending..." : "📧 Send unlock"}
-                        </button>
-                        {unlockResult[entry.uid] && (
-                          <span className="text-[10px]">{unlockResult[entry.uid]}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    {showPicks ? (
-                      <span className={`text-lg font-bold ${
-                        entry.totalScore < 0 ? "text-red-600" : entry.totalScore > 0 ? "text-blue-600" : "text-gray-500"
-                      }`}>
-                        {entry.displayTotal}
-                      </span>
-                    ) : (
-                      <span className="text-lg text-gray-300">🔒</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Card picks */}
-                {showPicks && (
-                  <div className="divide-y divide-gray-100">
-                    {entry.picks.map((pick, pickIdx) => {
-                      const isCut = ["cut", "wd", "dq"].includes(pick.status);
-                      return (
-                        <div
-                          key={pickIdx}
-                          className={`flex items-center gap-2 px-3.5 py-2 ${isCut ? "bg-red-50" : ""}`}
-                        >
-                          <span className="w-6 shrink-0 text-center text-[11px] font-bold text-gray-400">
-                            {pickLabels[pickIdx]}
-                          </span>
-                          <span className={`flex-1 min-w-0 truncate text-sm ${
-                            isCut ? "text-red-700 line-through" : "text-gray-700"
-                          }`}>
-                            {pick.playerName}
-                          </span>
-                          {!isCut && pick.displayThru && pick.status === "playing" && (
-                            <span className="shrink-0 text-[10px] font-medium text-gray-400">
-                              Thru {pick.displayThru}
-                            </span>
-                          )}
-                          {!isCut && pick.status === "finished" && (
-                            <span className="shrink-0 text-[10px] font-medium text-green-600">
-                              F
-                            </span>
-                          )}
-                          <span className={`shrink-0 text-sm font-bold ${
-                            isCut ? "text-red-700" : pick.scoreToPar < 0 ? "text-red-600" : pick.scoreToPar > 0 ? "text-blue-600" : "text-gray-500"
-                          }`}>
-                            {pick.displayScore}
-                          </span>
-                          {isCut && (
-                            <span className="shrink-0 rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                              CUT
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Payout badge */}
-                {showPicks && party.buyIn > 0 && (
-                  <div className="px-3.5 py-1.5 border-t border-gray-100">
-                    {idx === 0 && (
-                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
-                        Wins €{calculatePayouts(party).first}
-                      </span>
-                    )}
-                    {idx === 1 && party.secondPlacePayout && (
-                      <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-bold text-gray-600">
-                        2nd — €{calculatePayouts(party).second}
-                      </span>
-                    )}
-                    {idx === 2 && party.thirdPlacePayout && (
-                      <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-bold text-orange-600">
-                        3rd — €{calculatePayouts(party).third}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <LeaderboardCards
+            leaderboard={leaderboard}
+            party={party}
+            user={user}
+            picksRevealed={picksRevealed}
+            onSendUnlock={handleSendUnlock}
+            unlockSending={unlockSending}
+            unlockResult={unlockResult}
+          />
         </div>
 
         {/* Desktop table (always on sm+, or on mobile when table view selected) */}
-        <div className={`-mx-4 overflow-x-auto rounded-xl border border-gray-200 sm:mx-0 ${mobileView === "table" ? "sm:block" : "hidden sm:block"}`}>
-          <table className="w-full min-w-[880px] text-sm">
-            <thead>
-              <tr className="bg-green-800 text-white">
-                <th className="whitespace-nowrap px-2 py-2 text-left text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">#</th>
-                <th className="whitespace-nowrap px-2 py-2 text-left text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Player</th>
-                <th className="whitespace-nowrap px-2 py-2 text-center text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Group A</th>
-                <th className="whitespace-nowrap px-2 py-2 text-center text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Group B</th>
-                <th className="whitespace-nowrap px-2 py-2 text-center text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Group C</th>
-                <th className="whitespace-nowrap px-2 py-2 text-center text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Group D</th>
-                <th className="whitespace-nowrap px-2 py-2 text-center text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Wild 1</th>
-                <th className="whitespace-nowrap px-2 py-2 text-center text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Wild 2</th>
-                <th className="whitespace-nowrap px-2 py-2 text-center text-xs font-medium sm:px-4 sm:py-3 sm:text-sm">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leaderboard.map((entry, idx) => {
-                const isOwnRow = entry.uid === user?.uid;
-                const showPicks = picksRevealed || isOwnRow;
-                const hasSubmitted = entry.picks.some((p) => p.playerId);
-                return (
-                <tr
-                  key={entry.uid}
-                  className={`border-b border-gray-100 ${
-                    isOwnRow ? "bg-green-50" : idx % 2 === 0 ? "bg-white" : "bg-gray-50"
-                  }`}
-                >
-                  <td className="px-2 py-2 text-sm font-bold text-gray-500 sm:px-4 sm:py-3">
-                    {idx === 0 ? "🏆" : idx === 1 && party.secondPlacePayout ? "🥈" : idx === 2 && party.thirdPlacePayout ? "🥉" : idx + 1}
-                  </td>
-                  <td className="px-2 py-2 sm:px-4 sm:py-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      {entry.userPhotoURL && (
-                        <img
-                          src={entry.userPhotoURL}
-                          alt=""
-                          className="h-6 w-6 shrink-0 rounded-full"
-                          referrerPolicy="no-referrer"
-                        />
-                      )}
-                      <span className="min-w-0 truncate font-medium text-gray-900">
-                        {entry.userName}
-                        {isOwnRow && (
-                          <span className="text-green-600 text-xs ml-1">(you)</span>
-                        )}
-                      </span>
-                      {picksRevealed && party.buyIn > 0 && idx === 0 && (() => {
-                        const p = calculatePayouts(party);
-                        return (
-                          <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            +€{p.first}
-                          </span>
-                        );
-                      })()}
-                      {picksRevealed && party.buyIn > 0 && idx === 1 && party.secondPlacePayout && (
-                        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">
-                          +€{calculatePayouts(party).second}
-                        </span>
-                      )}
-                      {picksRevealed && party.buyIn > 0 && idx === 2 && party.thirdPlacePayout && (
-                        <span className="shrink-0 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-600">
-                          +€{calculatePayouts(party).third}
-                        </span>
-                      )}
-                      {!showPicks && (
-                        <span className={`ml-1 whitespace-nowrap text-xs ${hasSubmitted ? "text-green-600" : "text-gray-400"}`}>
-                          {hasSubmitted ? "✓ Picks submitted" : "Waiting..."}
-                        </span>
-                      )}
-                      {!isOwnRow && !hasSubmitted && user?.uid === party.createdBy && party.status === "locked" && (
-                        <div className="ml-1 inline-flex items-center gap-1">
-                          <button
-                            onClick={() => handleSendUnlock(entry.uid)}
-                            disabled={unlockSending[entry.uid]}
-                            className="inline-flex shrink-0 items-center rounded-md bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700 hover:bg-purple-200 transition-colors disabled:opacity-50"
-                          >
-                            {unlockSending[entry.uid] ? "Sending..." : "📧 Send unlock"}
-                          </button>
-                          {unlockResult[entry.uid] && (
-                            <span className="text-[10px] whitespace-nowrap">{unlockResult[entry.uid]}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                  {entry.picks.map((pick, pickIdx) => {
-                    if (!showPicks) {
-                      return (
-                        <td key={pickIdx} className="px-2 py-2 text-center sm:px-4 sm:py-3">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span className="text-base text-gray-300 sm:text-lg">🔒</span>
-                            <span className="text-[10px] text-gray-400">Hidden</span>
-                          </div>
-                        </td>
-                      );
-                    }
-                    const isCut = ["cut", "wd", "dq"].includes(pick.status);
-                    return (
-                      <td
-                        key={pickIdx}
-                        className={`px-2 py-2 text-center sm:px-4 sm:py-3 ${
-                          isCut
-                            ? "bg-red-100 border-l-2 border-red-400"
-                            : ""
-                        }`}
-                        title={
-                          isCut
-                            ? `${pick.playerName} — Missed Cut (+1 penalty)`
-                            : pick.playerName
-                        }
-                      >
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span
-                            className={`max-w-[88px] truncate text-[11px] sm:max-w-[100px] sm:text-xs ${
-                              isCut ? "text-red-700 line-through" : "text-gray-600"
-                            }`}
-                          >
-                            {pick.playerName}
-                          </span>
-                          <span
-                            className={`font-bold ${
-                              isCut
-                                ? "text-red-700"
-                                : pick.scoreToPar < 0
-                                ? "text-red-600"
-                                : pick.scoreToPar > 0
-                                ? "text-blue-600"
-                                : "text-gray-500"
-                            }`}
-                          >
-                            {pick.displayScore}
-                          </span>
-                          {!isCut && pick.displayThru && pick.status === "playing" && (
-                            <span className="text-[10px] font-medium text-gray-400">
-                              Thru {pick.displayThru}
-                            </span>
-                          )}
-                          {!isCut && pick.status === "finished" && (
-                            <span className="text-[10px] font-medium text-green-600">
-                              F
-                            </span>
-                          )}
-                          {isCut && (
-                            <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                              🔒 CUT
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                  <td className="px-2 py-2 text-center sm:px-4 sm:py-3">
-                    {showPicks ? (
-                      <span
-                        className={`text-base font-bold sm:text-lg ${
-                          entry.totalScore < 0
-                            ? "text-red-600"
-                            : entry.totalScore > 0
-                            ? "text-blue-600"
-                            : "text-gray-500"
-                        }`}
-                      >
-                        {entry.displayTotal}
-                      </span>
-                    ) : (
-                      <span className="text-gray-300 text-lg">🔒</span>
-                    )}
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <LeaderboardTable
+          leaderboard={leaderboard}
+          party={party}
+          user={user}
+          picksRevealed={picksRevealed}
+          onSendUnlock={handleSendUnlock}
+          unlockSending={unlockSending}
+          unlockResult={unlockResult}
+          mobileView={mobileView}
+        />
         </>
       )}
 
