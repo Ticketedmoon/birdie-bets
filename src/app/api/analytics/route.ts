@@ -35,9 +35,8 @@ export async function POST(request: NextRequest) {
     const browser = parseBrowser(ua);
     const country = request.headers.get("x-vercel-ip-country") || "unknown";
 
-    // Fire-and-forget: don't await the Firestore write so the response is instant
     const eventRef = doc(collection(db(), "analytics"));
-    setDoc(eventRef, {
+    await setDoc(eventRef, {
       type: body.type || "page_view",
       page: body.page,
       action: body.action || null,
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest) {
       country,
       userAgent: ua.slice(0, 256),
       timestamp: new Date().toISOString(),
-    }).catch((err) => console.error("Analytics write failed:", err));
+    });
 
     return NextResponse.json({ ok: true });
   } catch (error) {
