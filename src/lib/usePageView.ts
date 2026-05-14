@@ -37,6 +37,9 @@ function logEvent(data: Record<string, unknown>) {
   }
 }
 
+const LAST_VISIT_DEBOUNCE_MS = 3 * 60 * 1000;
+const LAST_VISIT_STORAGE_KEY = "analytics_last_visit_ts";
+
 /**
  * Hook that logs a page view on every route change.
  */
@@ -53,15 +56,20 @@ export function usePageView() {
       email: user?.email || undefined,
     });
 
-    // Upsert last-visit record for authenticated users
+    // Upsert last-visit record, debounced to once per 3 minutes
     if (user?.uid) {
       try {
+        const lastWrite = parseInt(sessionStorage.getItem(LAST_VISIT_STORAGE_KEY) || "0", 10);
+        if (Date.now() - lastWrite < LAST_VISIT_DEBOUNCE_MS) return;
+
         const db = getFirebaseDb();
         setDoc(doc(db, "analytics_last_visit", user.uid), {
           email: user.email || null,
           lastPage: pathname,
           lastVisit: new Date().toISOString(),
-        }).catch(() => {});
+        })
+          .then(() => sessionStorage.setItem(LAST_VISIT_STORAGE_KEY, String(Date.now())))
+          .catch(() => {});
       } catch {
         // Silently ignore
       }
