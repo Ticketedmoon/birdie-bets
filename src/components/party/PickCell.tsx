@@ -35,16 +35,16 @@ export function PickCell({ pick, label, variant }: PickCellProps) {
 
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <span className={`max-w-[88px] truncate text-[11px] sm:max-w-[100px] sm:text-xs ${nameColor}`}>{pick.playerName}</span>
-      <span className={`font-bold ${scoreColor}`}>{pick.displayScore}</span>
+      <span className={`max-w-[52px] truncate text-[10px] sm:max-w-[100px] sm:text-xs ${nameColor}`}>{pick.playerName}</span>
+      <span className={`text-xs font-bold sm:text-sm ${scoreColor}`}>{pick.displayScore}</span>
       {!isCut && pick.displayThru && pick.status === "playing" && (
-        <span className="text-[10px] font-medium text-gray-400">Thru {pick.displayThru}</span>
+        <span className="hidden text-[10px] font-medium text-gray-400 sm:inline">Thru {pick.displayThru}</span>
       )}
       {!isCut && pick.status === "finished" && (
-        <span className="text-[10px] font-medium text-green-600">F</span>
+        <span className="hidden text-[10px] font-medium text-green-600 sm:inline">F</span>
       )}
       {isCut && (
-        <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">🔒 CUT</span>
+        <span className="rounded bg-red-600 px-1 py-0.5 text-[9px] font-bold text-white sm:px-1.5 sm:text-[10px]">CUT</span>
       )}
       <span className="sr-only">{label}</span>
     </div>

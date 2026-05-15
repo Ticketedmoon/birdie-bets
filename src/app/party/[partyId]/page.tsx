@@ -49,7 +49,7 @@ function PartyContent() {
   const [mobileView, setMobileView] = useState<"cards" | "table">("cards");
   const [unlockSending, setUnlockSending] = useState<Record<string, boolean>>({});
   const [unlockResult, setUnlockResult] = useState<Record<string, string>>({});
-  const [currentRound, setCurrentRound] = useState<{ currentRound: number; totalRounds: number } | null>(null);
+  const [currentRound, setCurrentRound] = useState<{ currentRound: number; displayRound: number; totalRounds: number; nextRoundTeeTime: string | null } | null>(null);
 
   // Show email send results from create flow
   useEffect(() => {
@@ -389,10 +389,16 @@ function PartyContent() {
       </div>
 
       {currentRound && (party.status === "locked" || party.status === "complete") && (
-        <div className="mb-6">
+        <div className="mb-6 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-5 py-2 text-sm sm:text-base font-semibold text-green-800 shadow-sm">
-            ⛳ Round {currentRound.currentRound} of {currentRound.totalRounds}
+            ⛳ Round {currentRound.displayRound} of {currentRound.totalRounds}
           </span>
+          {currentRound.nextRoundTeeTime && party.status === "locked" && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-4 py-2 text-xs sm:text-sm font-medium text-amber-800 shadow-sm">
+              🕐 Tee-off: {new Date(currentRound.nextRoundTeeTime).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
+              {new Date(currentRound.nextRoundTeeTime).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+            </span>
+          )}
         </div>
       )}
 

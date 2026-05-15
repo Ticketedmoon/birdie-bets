@@ -813,7 +813,8 @@ describe("fetchCurrentRound", () => {
     });
 
     const result = await fetchCurrentRound("evt1");
-    expect(result).toEqual({ currentRound: 2, totalRounds: 4 });
+    // All STATUS_FINISH → displayRound = maxPeriod + 1 = 3
+    expect(result).toEqual({ currentRound: 2, displayRound: 3, totalRounds: 4, nextRoundTeeTime: null });
   });
 
   it("returns round 4 of 4 for final round", async () => {
@@ -830,7 +831,8 @@ describe("fetchCurrentRound", () => {
     });
 
     const result = await fetchCurrentRound("evt1");
-    expect(result).toEqual({ currentRound: 4, totalRounds: 4 });
+    // Round 4 of 4 finished — displayRound capped at 4, no next tee time
+    expect(result).toEqual({ currentRound: 4, displayRound: 4, totalRounds: 4, nextRoundTeeTime: null });
   });
 
   it("returns null on API error", async () => {
@@ -877,7 +879,7 @@ describe("fetchCurrentRound", () => {
     });
 
     const result = await fetchCurrentRound("evt1");
-    expect(result).toEqual({ currentRound: 5, totalRounds: 5 });
+    expect(result).toEqual({ currentRound: 5, displayRound: 5, totalRounds: 5, nextRoundTeeTime: null });
   });
 
   it("ignores linescores with empty or dash displayValue (ESPN pre-populates future rounds)", async () => {
@@ -901,7 +903,8 @@ describe("fetchCurrentRound", () => {
     const result = await fetchCurrentRound("evt1");
     // Only comp1 has a real score in period 1 ("-1" is a valid score)
     // Period 2 has no real scores, so currentRound should be 1
-    expect(result).toEqual({ currentRound: 1, totalRounds: 4 });
+    // All STATUS_FINISH → displayRound = 2
+    expect(result).toEqual({ currentRound: 1, displayRound: 2, totalRounds: 4, nextRoundTeeTime: null });
   });
 
   it("returns null when all linescores have empty/dash values", async () => {
@@ -917,5 +920,105 @@ describe("fetchCurrentRound", () => {
 
     const result = await fetchCurrentRound("evt1");
     expect(result).toBeNull();
+  });
+
+  it("returns next round tee time when current round is complete", async () => {
+    const comp = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "70", period: 1, teeTime: "2025-06-01T07:00:00Z" },
+        { displayValue: "", period: 2, teeTime: "2025-06-02T08:30:00Z" },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    // comp has STATUS_FINISH → current round (1) is done → displayRound = 2, tee time from round 2
+    expect(result).toEqual({ currentRound: 1, displayRound: 2, totalRounds: 4, nextRoundTeeTime: "2025-06-02T08:30:00Z" });
+  });
+
+  it("returns current round tee time when round is still in progress", async () => {
+    const comp1 = makeESPNCompetitor({
+      status: { type: { name: "STATUS_ACTIVE", state: "in" }, position: { displayName: "T5" } },
+      linescores: [
+        { displayValue: "70", period: 1, teeTime: "2025-06-01T07:00:00Z" },
+        { displayValue: "", period: 2, teeTime: "2025-06-02T09:00:00Z" },
+      ],
+    });
+    const comp2 = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "68", period: 1, teeTime: "2025-06-01T07:30:00Z" },
+        { displayValue: "", period: 2, teeTime: "2025-06-02T08:00:00Z" },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp1, comp2] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    // comp1 is STATUS_ACTIVE → round 1 still in progress → displayRound = 1
+    expect(result).toEqual({ currentRound: 1, displayRound: 1, totalRounds: 4, nextRoundTeeTime: "2025-06-01T07:00:00Z" });
+  });
+
+  it("picks earliest tee time across competitors for next round", async () => {
+    const comp1 = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "70", period: 1, teeTime: "2025-06-01T07:00:00Z" },
+        { displayValue: "", period: 2, teeTime: "2025-06-02T10:00:00Z" },
+      ],
+    });
+    const comp2 = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "68", period: 1, teeTime: "2025-06-01T07:30:00Z" },
+        { displayValue: "", period: 2, teeTime: "2025-06-02T07:45:00Z" },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp1, comp2] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    // Both finished → displayRound = 2 → earliest tee time is comp2's
+    expect(result).toEqual({ currentRound: 1, displayRound: 2, totalRounds: 4, nextRoundTeeTime: "2025-06-02T07:45:00Z" });
+  });
+
+  it("returns null tee time when next round has no tee times", async () => {
+    const comp = makeESPNCompetitor({
+      linescores: [
+        { displayValue: "70", period: 1, teeTime: "2025-06-01T07:00:00Z" },
+        { displayValue: "", period: 2 },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    expect(result).toEqual({ currentRound: 1, displayRound: 2, totalRounds: 4, nextRoundTeeTime: null });
+  });
+
+  it("treats STATUS_SCHEDULED as round complete (between rounds overnight)", async () => {
+    const comp1 = makeESPNCompetitor({
+      status: { type: { name: "STATUS_SCHEDULED", state: "pre" }, position: { displayName: "T1" } },
+      linescores: [
+        { displayValue: "68", period: 1, teeTime: "2025-06-01T07:00:00Z" },
+        { displayValue: "", period: 2, teeTime: "2025-06-02T08:30:00Z" },
+      ],
+    });
+    const comp2 = makeESPNCompetitor({
+      status: { type: { name: "STATUS_SCHEDULED", state: "pre" }, position: { displayName: "T3" } },
+      linescores: [
+        { displayValue: "70", period: 1, teeTime: "2025-06-01T07:30:00Z" },
+        { displayValue: "", period: 2, teeTime: "2025-06-02T09:00:00Z" },
+      ],
+    });
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ competitions: [{ competitors: [comp1, comp2] }] })],
+    });
+
+    const result = await fetchCurrentRound("evt1");
+    // STATUS_SCHEDULED = not actively playing → round 1 is done → display round 2
+    expect(result).toEqual({ currentRound: 1, displayRound: 2, totalRounds: 4, nextRoundTeeTime: "2025-06-02T08:30:00Z" });
   });
 });

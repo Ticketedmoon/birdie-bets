@@ -153,11 +153,19 @@ export async function fetchTournamentSnapshot(eventId: string): Promise<{
  * Fetch the current round number for a tournament.
  * Derives from competitor linescores — the highest period with a score
  * across any competitor indicates the current round.
- * Returns { currentRound, totalRounds } or null if not available.
+ * Returns round info including the next tee time, or null if not available.
+ *
+ * - `currentRound`: the latest round that has scores (completed or in progress)
+ * - `displayRound`: the round to show to users — equals currentRound when play
+ *   is in progress, or currentRound + 1 when the day's play is done and the
+ *   next round hasn't started yet (capped at totalRounds)
+ * - `nextRoundTeeTime`: the earliest tee time for `displayRound`
  */
 export async function fetchCurrentRound(eventId: string): Promise<{
   currentRound: number;
+  displayRound: number;
   totalRounds: number;
+  nextRoundTeeTime: string | null;
 } | null> {
   const res = await fetch(`${ESPN_BASE}/leaderboard?event=${eventId}`);
   if (!res.ok) return null;
@@ -183,7 +191,42 @@ export async function fetchCurrentRound(eventId: string): Promise<{
 
   if (maxPeriod === 0) return null;
 
-  return { currentRound: maxPeriod, totalRounds };
+  // Determine whether the current round is still in progress by checking
+  // if any competitor is actively playing on the course right now.
+  // ESPN uses STATUS_IN_PROGRESS / STATUS_PLAY for active play. Between rounds
+  // players show STATUS_SCHEDULED, and after finishing STATUS_FINISH etc.
+  const ACTIVE_PLAY_STATUSES = new Set(["STATUS_IN_PROGRESS", "STATUS_PLAY", "STATUS_ACTIVE"]);
+  const isCurrentRoundInProgress = competitors.some((comp: ESPNCompetitor) => {
+    const statusName = comp.status?.type?.name;
+    return statusName != null && ACTIVE_PLAY_STATUSES.has(statusName);
+  });
+
+  // displayRound: show the next round when the current one is done,
+  // but cap at totalRounds (don't show "Round 5 of 4").
+  const displayRound = isCurrentRoundInProgress
+    ? maxPeriod
+    : Math.min(maxPeriod + 1, totalRounds);
+
+  // The round we want tee times for matches displayRound.
+  const teeTimeRound = isCurrentRoundInProgress ? maxPeriod : maxPeriod + 1;
+
+  let nextRoundTeeTime: string | null = null;
+  if (teeTimeRound <= totalRounds) {
+    const teeTimes: string[] = [];
+    for (const comp of competitors) {
+      if (!comp.linescores) continue;
+      const ls = comp.linescores.find(
+        (l: { period: number; teeTime?: string }) => l.period === teeTimeRound
+      );
+      if (ls?.teeTime && !isNaN(Date.parse(ls.teeTime))) {
+        teeTimes.push(ls.teeTime);
+      }
+    }
+    teeTimes.sort();
+    nextRoundTeeTime = teeTimes[0] ?? null;
+  }
+
+  return { currentRound: maxPeriod, displayRound, totalRounds, nextRoundTeeTime };
 }
 
 export async function fetchPlayersFromLeaderboard(eventId: string): Promise<Player[]> {
