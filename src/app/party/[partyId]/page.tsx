@@ -393,7 +393,7 @@ function PartyContent() {
           <span className="inline-flex items-center gap-2 rounded-full bg-green-100 px-5 py-2 text-sm sm:text-base font-semibold text-green-800 shadow-sm">
             ⛳ Round {currentRound.displayRound} of {currentRound.totalRounds}
           </span>
-          {currentRound.nextRoundTeeTime && party.status === "locked" && (
+          {currentRound.nextRoundTeeTime && party.status === "locked" && new Date(currentRound.nextRoundTeeTime) > new Date() && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-4 py-2 text-xs sm:text-sm font-medium text-amber-800 shadow-sm">
               🕐 Tee-off: {new Date(currentRound.nextRoundTeeTime).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}{" "}
               {new Date(currentRound.nextRoundTeeTime).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
