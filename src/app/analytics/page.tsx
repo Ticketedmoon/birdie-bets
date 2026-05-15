@@ -21,6 +21,7 @@ interface AnalyticsData {
   byUserPage: { email: string | null; page: string; count: number }[];
   recentEvents: Record<string, unknown>[];
   lastVisits: { uid: string; email: string | null; lastPage: string; lastVisit: string }[];
+  dailyVisits: { date: string; label: string; count: number }[];
 }
 
 function sortedEntries(obj: Record<string, number>): [string, number][] {
@@ -50,6 +51,52 @@ function BreakdownTable({ title, data }: { title: string; data: [string, number]
             <span className="text-sm font-semibold text-gray-900 ml-4 shrink-0">{count}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function DailyChart({ data }: { data: { date: string; label: string; count: number }[] }) {
+  if (data.length === 0) return null;
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden mb-8">
+      <div className="px-4 py-3 border-b border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-800">Daily Activity</h3>
+      </div>
+      <div className="px-4 py-4">
+        <div className="flex items-end gap-1" style={{ height: "160px" }}>
+          {data.map((d) => {
+            const heightPct = maxCount > 0 ? (d.count / maxCount) * 100 : 0;
+            return (
+              <div key={d.date} className="group relative flex flex-1 flex-col items-center justify-end h-full">
+                {/* Tooltip */}
+                <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 rounded bg-gray-800 px-2 py-1 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 whitespace-nowrap z-10">
+                  {d.count} visit{d.count !== 1 ? "s" : ""}
+                </div>
+                {/* Bar */}
+                <div
+                  className="w-full min-h-[2px] rounded-t bg-green-600 transition-all group-hover:bg-green-500"
+                  style={{ height: `${Math.max(heightPct, 1.5)}%` }}
+                />
+              </div>
+            );
+          })}
+        </div>
+        {/* X-axis labels */}
+        <div className="mt-2 flex gap-1">
+          {data.map((d, i) => {
+            const showLabel = data.length <= 14 || i % Math.ceil(data.length / 10) === 0 || i === data.length - 1;
+            return (
+              <div key={d.date} className="flex-1 text-center">
+                {showLabel && (
+                  <span className="text-[9px] text-gray-400 sm:text-[10px]">{d.label}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -125,6 +172,13 @@ export default function AnalyticsPage() {
       let visitsLastHour = 0;
       let visitsLastDay = 0;
       let visitsLastWeek = 0;
+      const dailyBuckets: Record<string, number> = {};
+
+      // Pre-fill all days in the range so the chart has no gaps
+      for (let i = numDays - 1; i >= 0; i--) {
+        const d = new Date(now - i * 24 * 60 * 60 * 1000);
+        dailyBuckets[d.toISOString().slice(0, 10)] = 0;
+      }
 
       for (const event of events) {
         const e = event as Record<string, unknown>;
@@ -144,6 +198,9 @@ export default function AnalyticsPage() {
         if (ts >= oneHourAgo) visitsLastHour++;
         if (ts >= oneDayAgo) visitsLastDay++;
         if (ts >= oneWeekAgo) visitsLastWeek++;
+
+        const dayKey = ts.slice(0, 10);
+        if (dayKey in dailyBuckets) dailyBuckets[dayKey]++;
 
         if (uid) {
           if (!byUser[uid]) byUser[uid] = { email: null, views: 0, clicks: 0, lastHour: 0, lastDay: 0, lastWeek: 0 };
@@ -172,6 +229,12 @@ export default function AnalyticsPage() {
         lastVisit: (d.data().lastVisit as string) || "",
       }));
 
+      const dailyVisits = Object.entries(dailyBuckets).map(([date, count]) => {
+        const d = new Date(date + "T12:00:00");
+        const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+        return { date, label, count };
+      });
+
       const result: AnalyticsData = {
         totalViews: events.length,
         uniqueUsers: Object.keys(byUser).length,
@@ -187,6 +250,7 @@ export default function AnalyticsPage() {
         byUserPage: Object.values(userPageMap).sort((a, b) => b.count - a.count),
         recentEvents: events.slice(0, 50),
         lastVisits,
+        dailyVisits,
       };
 
       setData(result);
@@ -313,6 +377,9 @@ export default function AnalyticsPage() {
           <StatCard label="Last 24 Hours" value={data.visitsLastDay} />
           <StatCard label="Last 7 Days" value={data.visitsLastWeek} />
         </div>
+
+        {/* Daily activity chart */}
+        <DailyChart data={data.dailyVisits} />
 
         {/* Breakdowns */}
         <div className="grid gap-6 mb-8 sm:grid-cols-2 lg:grid-cols-3">
