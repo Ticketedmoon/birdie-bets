@@ -59,7 +59,7 @@ describe("validatePartyPicks", () => {
     mocks.getAllPicksForParty.mockResolvedValue({
       uid1: makePicksForUser({ groupA: "Player A" }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([]);
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(true);
@@ -73,10 +73,10 @@ describe("validatePartyPicks", () => {
         groupB: "Rory McIlroy",
       }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Scottie Scheffler"),
       makeLeaderboardPlayer("Rory McIlroy"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(true);
@@ -90,10 +90,10 @@ describe("validatePartyPicks", () => {
         groupB: "Rory McIlroy",
       }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Scottie Scheffler"),
       makeLeaderboardPlayer("Rory McIlroy"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(false);
@@ -106,9 +106,9 @@ describe("validatePartyPicks", () => {
     mocks.getAllPicksForParty.mockResolvedValue({
       uid1: makePicksForUser({ groupA: "SCOTTIE SCHEFFLER" }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Scottie Scheffler"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(true);
@@ -118,9 +118,9 @@ describe("validatePartyPicks", () => {
     mocks.getAllPicksForParty.mockResolvedValue({
       uid1: makePicksForUser({ groupA: "Ludvig Aberg" }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Ludvig Åberg"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(true);
@@ -130,9 +130,9 @@ describe("validatePartyPicks", () => {
     mocks.getAllPicksForParty.mockResolvedValue({
       uid1: makePicksForUser({ groupA: "  Rory   McIlroy  " }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Rory McIlroy"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(true);
@@ -143,9 +143,9 @@ describe("validatePartyPicks", () => {
       uid1: makePicksForUser({ groupA: "Scottie Scheffler" }),
       // other slots are null
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Scottie Scheffler"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(true);
@@ -156,9 +156,9 @@ describe("validatePartyPicks", () => {
       uid1: makePicksForUser({ groupA: "Invalid Player 1" }),
       uid2: makePicksForUser({ groupB: "Invalid Player 2" }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Scottie Scheffler"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(false);
@@ -182,9 +182,9 @@ describe("validatePartyPicks", () => {
         groupB: "Bad Pick B",
       }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Scottie Scheffler"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(false);
@@ -195,9 +195,9 @@ describe("validatePartyPicks", () => {
     mocks.getAllPicksForParty.mockResolvedValue({
       uid1: makePicksForUser({ groupA: "  LUDVIG   ABERG  " }),
     });
-    mocks.fetchLeaderboard.mockResolvedValue([
+    mocks.fetchLeaderboard.mockResolvedValue({ scores: [
       makeLeaderboardPlayer("Ludvig Åberg"),
-    ]);
+    ], cutLine: null, cutRound: null });
 
     const result = await validatePartyPicks(party);
     expect(result.valid).toBe(true);

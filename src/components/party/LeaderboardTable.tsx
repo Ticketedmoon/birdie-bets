@@ -145,7 +145,7 @@ export function LeaderboardTable({
                       <td
                         key={pickIdx}
                         className={`px-1.5 py-2 text-center sm:px-4 sm:py-3 ${isCut ? "border-l-2 border-red-400 bg-red-100" : ""}`}
-                        title={isCut ? `${pick.playerName} — Missed Cut (+1 penalty)` : pick.playerName}
+                        title={isCut ? `${pick.playerName} — Missed Cut (scored at cut line + 1)` : pick.playerName}
                       >
                         <PickCell pick={pick} label={PICK_LABELS[pickIdx]} variant="table" />
                       </td>

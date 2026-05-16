@@ -1,7 +1,7 @@
 # ADR-005: Scoring System and Missed Cut Penalty
 
 ## Status
-Accepted
+Accepted — **cut penalty section superseded by [ADR-023](023-cutline-scoring.md)**
 
 ## Date
 2026-05-12

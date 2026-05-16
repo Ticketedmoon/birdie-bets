@@ -6,7 +6,8 @@ export function buildLeaderboardEntries(
   party: Party,
   allPicks: Record<string, Picks>,
   usersInfo: Record<string, { displayName: string; photoURL?: string }>,
-  scores: PlayerScore[]
+  scores: PlayerScore[],
+  cutLine?: number | null,
 ): LeaderboardEntry[] {
   const scoreByIdMap = new Map<string, PlayerScore>();
   const scoreByNameMap = new Map<string, PlayerScore>();
@@ -52,10 +53,10 @@ export function buildLeaderboardEntries(
             };
           }
 
-          const { effectiveScore, penalty } = calculateEffectiveScore(score);
+          const { effectiveScore, penalty } = calculateEffectiveScore(score, cutLine);
           totalScore += effectiveScore;
 
-          const displayParts = [formatScoreToPar(score.scoreToPar)];
+          const displayParts = [formatScoreToPar(effectiveScore)];
           if (penalty > 0) displayParts.push(`(+${penalty})`);
 
           return {

@@ -15,7 +15,7 @@ import {
   EMAIL_BANNER_MS,
   INVITE_RESULT_MS,
 } from "@/lib/constants";
-import { fetchFirstTeeTime, fetchCurrentRound, fetchLeaderboard } from "@/lib/espn";
+import { fetchFirstTeeTime, fetchCurrentRound, fetchLeaderboard, formatScoreToPar } from "@/lib/espn";
 import { addInvites, deleteParty, getAllPicksForParty, getParty, getUsersInfo, leaveParty } from "@/lib/firestore";
 import { buildLeaderboardEntries } from "@/lib/leaderboard";
 import { calculatePayouts } from "@/lib/payouts";
@@ -50,6 +50,8 @@ function PartyContent() {
   const [unlockSending, setUnlockSending] = useState<Record<string, boolean>>({});
   const [unlockResult, setUnlockResult] = useState<Record<string, string>>({});
   const [currentRound, setCurrentRound] = useState<{ currentRound: number; displayRound: number; totalRounds: number; nextRoundTeeTime: string | null } | null>(null);
+  const [cutLine, setCutLine] = useState<number | null>(null);
+  const [cutRound, setCutRound] = useState<number | null>(null);
 
   // Show email send results from create flow
   useEffect(() => {
@@ -67,13 +69,15 @@ function PartyContent() {
   }, [searchParams]);
 
   const buildLeaderboard = async (partyData: Party) => {
-    const [allPicks, usersInfo, scores] = await Promise.all([
+    const [allPicks, usersInfo, leaderboardResult] = await Promise.all([
       getAllPicksForParty(partyData.id),
       getUsersInfo(partyData.memberUids),
-      fetchLeaderboard(partyData.tournamentId).catch(() => [] as PlayerScore[]),
+      fetchLeaderboard(partyData.tournamentId).catch(() => ({ scores: [] as PlayerScore[], cutLine: null, cutRound: null })),
     ]);
 
-    return buildLeaderboardEntries(partyData, allPicks, usersInfo, scores);
+    setCutLine(leaderboardResult.cutLine);
+    setCutRound(leaderboardResult.cutRound);
+    return buildLeaderboardEntries(partyData, allPicks, usersInfo, leaderboardResult.scores, leaderboardResult.cutLine);
   };
 
   useEffect(() => {
@@ -406,6 +410,16 @@ function PartyContent() {
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" style={{ animation: "pulse-dot 1.5s ease-in-out infinite" }} />
               </span>
               Round underway
+            </span>
+          )}
+          {cutLine != null && cutRound != null && cutRound > 0 && currentRound.currentRound >= cutRound && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-4 py-2 text-xs sm:text-sm font-medium text-red-800 shadow-sm">
+              ✂️ Cut line: {formatScoreToPar(cutLine)} (cut players score {formatScoreToPar(cutLine + 1)})
+            </span>
+          )}
+          {cutRound === 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-4 py-2 text-xs sm:text-sm font-medium text-gray-600 shadow-sm">
+              No cut this tournament
             </span>
           )}
         </div>

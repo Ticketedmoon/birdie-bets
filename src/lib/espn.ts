@@ -1,4 +1,4 @@
-import type { Tournament, Player, PlayerScore, ESPNEvent, ESPNCompetitor, GroupedPlayers } from "@/types";
+import type { Tournament, Player, PlayerScore, ESPNEvent, ESPNCompetitor, GroupedPlayers, LeaderboardResult } from "@/types";
 
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/golf";
 
@@ -86,15 +86,18 @@ export async function fetchTournamentSchedule(year: number = new Date().getFullY
   return (data.events || []).map(mapESPNEventToTournament);
 }
 
-export async function fetchLeaderboard(eventId: string): Promise<PlayerScore[]> {
+export async function fetchLeaderboard(eventId: string): Promise<LeaderboardResult> {
   const res = await fetch(`${ESPN_BASE}/leaderboard?event=${eventId}`);
   if (!res.ok) throw new Error(`ESPN API error: ${res.status}`);
   const data = await res.json();
   const event = data.events?.[0];
-  if (!event) return [];
+  if (!event) return { scores: [], cutLine: null, cutRound: null };
   const competition = event.competitions?.[0];
-  if (!competition) return [];
-  return (competition.competitors || []).map(mapCompetitorToPlayerScore);
+  if (!competition) return { scores: [], cutLine: null, cutRound: null };
+  const scores = (competition.competitors || []).map(mapCompetitorToPlayerScore);
+  const cutLine: number | null = event.tournament?.cutScore ?? null;
+  const cutRound: number | null = event.tournament?.cutRound ?? null;
+  return { scores, cutLine, cutRound };
 }
 
 /**
@@ -323,12 +326,25 @@ async function fetchPlayersFromRecentTournament(): Promise<Player[]> {
 
 /**
  * Calculate the effective score for a player, including missed cut penalty.
- * Per ADR-005: +1 penalty for CUT, WD, or DQ.
+ * Per ADR-023: cut players are capped at cutLine + 1 (from ESPN tournament.cutScore).
+ * WD/DQ players still receive the flat +1 penalty from ADR-005.
+ * If no cutLine is available (pre-cut), cut players fall back to the +1 penalty.
  */
-export function calculateEffectiveScore(playerScore: PlayerScore): {
+export function calculateEffectiveScore(
+  playerScore: PlayerScore,
+  cutLine?: number | null,
+): {
   effectiveScore: number;
   penalty: number;
 } {
+  if (playerScore.status === "cut" && cutLine != null) {
+    const cappedScore = cutLine + 1;
+    return {
+      effectiveScore: cappedScore,
+      penalty: cappedScore - playerScore.scoreToPar,
+    };
+  }
+
   const isPenalised = ["cut", "wd", "dq"].includes(playerScore.status);
   const penalty = isPenalised ? 1 : 0;
   return {

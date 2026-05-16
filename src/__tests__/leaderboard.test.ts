@@ -122,7 +122,27 @@ describe("buildLeaderboardEntries", () => {
     expect(uid1Entry.picks[0].scoreToPar).toBe(-5);
   });
 
-  it("applies cut penalty to effective score", () => {
+  it("applies cutLine-based penalty to cut player scores", () => {
+    const picks: Picks = {
+      groupA: { playerId: "a1", playerName: "Player A" },
+      groupB: null,
+      groupC: null,
+      groupD: null,
+      wildcard1: null,
+      wildcard2: null,
+    };
+    const allPicks: Record<string, Picks> = { uid1: picks };
+    const scores = [makeScore({ playerId: "a1", playerName: "Player A", scoreToPar: 7, status: "cut" })];
+
+    const entries = buildLeaderboardEntries(party, allPicks, usersInfo, scores, 4);
+    const uid1Entry = entries.find((e) => e.uid === "uid1")!;
+
+    // cutLine 4 + 1 = 5 (capped), not 7 + 1 = 8
+    expect(uid1Entry.picks[0].scoreToPar).toBe(5);
+    expect(uid1Entry.picks[0].displayScore).toBe("+5");
+  });
+
+  it("falls back to +1 penalty for cut player when no cutLine provided", () => {
     const picks: Picks = {
       groupA: { playerId: "a1", playerName: "Player A" },
       groupB: null,
@@ -137,9 +157,9 @@ describe("buildLeaderboardEntries", () => {
     const entries = buildLeaderboardEntries(party, allPicks, usersInfo, scores);
     const uid1Entry = entries.find((e) => e.uid === "uid1")!;
 
-    // 3 + 1 penalty = 4
+    // No cutLine, so fallback: 3 + 1 = 4
     expect(uid1Entry.picks[0].scoreToPar).toBe(4);
-    expect(uid1Entry.picks[0].displayScore).toContain("(+1)");
+    expect(uid1Entry.picks[0].displayScore).toBe("+4 (+1)");
   });
 
   it("returns dash score when player not found in leaderboard", () => {

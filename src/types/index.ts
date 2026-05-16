@@ -122,6 +122,13 @@ export interface LeaderboardEntry {
   displayTotal: string;
 }
 
+export interface LeaderboardResult {
+  scores: PlayerScore[];
+  cutLine: number | null;
+  /** 0 means no cut for this tournament, >0 is the round the cut happens after */
+  cutRound: number | null;
+}
+
 export interface ESPNEvent {
   id: string;
   name: string;
@@ -136,6 +143,7 @@ export interface ESPNEvent {
   tournament: {
     displayName: string;
     major: boolean;
+    cutScore?: number;
   };
   courses: {
     name: string;

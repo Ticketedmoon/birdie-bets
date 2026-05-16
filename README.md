@@ -21,7 +21,7 @@ BirdieBets is a golf tournament pool tracker where you and your friends each pic
 3. **Pick 6 players** — 1 from each skill tier (A–D) + 2 wildcards
 4. **Tournament starts** — picks lock, everyone's selections are revealed
 5. **Watch the leaderboard** — scores auto-refresh every 5 minutes from live ESPN data
-6. **Lowest score wins** — missed the cut? That's a +1 penalty 🔴
+6. **Lowest score wins** — missed the cut? Your score is capped at cutline + 1 🔴
 
 ## Features
 
@@ -37,7 +37,7 @@ You pick 1 from each group + 2 wildcards. No stacking the world's best!
 
 ### 📊 Live Leaderboard
 - Auto-refreshes every 5 minutes with visible countdown timer
-- Missed cut players highlighted in **red** with 🔒 CUT badge and +1 penalty
+- Missed cut players highlighted in **red** with 🔒 CUT badge, scored at cutline + 1
 - Your row highlighted in green
 - Hidden picks until the tournament starts (no peeking!)
 
@@ -183,6 +183,7 @@ All major design decisions are documented as ADRs:
 | [017](docs/adr/017-frozen-player-snapshots.md) | Freeze player groups & wildcards at party creation |
 | [018](docs/adr/018-field-validation-gate.md) | Field validation gate before tournament lock |
 | [019](docs/adr/019-mobile-card-leaderboard.md) | Mobile card layout for leaderboard with view toggle |
+| [023](docs/adr/023-cutline-scoring.md) | Cut players capped at cutline + 1 (supersedes ADR-005 cut penalty) |
 
 ---
 

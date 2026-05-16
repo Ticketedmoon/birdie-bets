@@ -71,28 +71,58 @@ describe("calculateEffectiveScore", () => {
     expect(result.penalty).toBe(0);
   });
 
-  it("adds +1 penalty for cut status", () => {
+  it("caps cut player at cutLine + 1 when cutLine is provided", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 7, status: "cut" }), 4);
+    expect(result.effectiveScore).toBe(5);
+    expect(result.penalty).toBe(-2);
+  });
+
+  it("caps cut player at cutLine + 1 even when their score equals the cutLine", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 4, status: "cut" }), 4);
+    expect(result.effectiveScore).toBe(5);
+    expect(result.penalty).toBe(1);
+  });
+
+  it("caps cut player at cutLine + 1 when cutLine is zero (even par)", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 3, status: "cut" }), 0);
+    expect(result.effectiveScore).toBe(1);
+    expect(result.penalty).toBe(-2);
+  });
+
+  it("caps cut player at cutLine + 1 when cutLine is negative (under par)", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 0, status: "cut" }), -1);
+    expect(result.effectiveScore).toBe(0);
+    expect(result.penalty).toBe(0);
+  });
+
+  it("falls back to +1 penalty for cut player when cutLine is null", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 5, status: "cut" }), null);
+    expect(result.effectiveScore).toBe(6);
+    expect(result.penalty).toBe(1);
+  });
+
+  it("falls back to +1 penalty for cut player when cutLine is undefined", () => {
     const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 5, status: "cut" }));
     expect(result.effectiveScore).toBe(6);
     expect(result.penalty).toBe(1);
   });
 
-  it("adds +1 penalty for wd status", () => {
-    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 1, status: "wd" }));
+  it("adds +1 penalty for wd status (unaffected by cutLine)", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 1, status: "wd" }), 4);
     expect(result.effectiveScore).toBe(2);
     expect(result.penalty).toBe(1);
   });
 
-  it("adds +1 penalty for dq status", () => {
-    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 0, status: "dq" }));
+  it("adds +1 penalty for dq status (unaffected by cutLine)", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 0, status: "dq" }), 4);
     expect(result.effectiveScore).toBe(1);
     expect(result.penalty).toBe(1);
   });
 
-  it("handles negative score with penalty", () => {
-    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: -1, status: "cut" }));
-    expect(result.effectiveScore).toBe(0);
-    expect(result.penalty).toBe(1);
+  it("does not penalise playing status even with cutLine", () => {
+    const result = calculateEffectiveScore(makePlayerScore({ scoreToPar: 6, status: "playing" }), 4);
+    expect(result.effectiveScore).toBe(6);
+    expect(result.penalty).toBe(0);
   });
 });
 
@@ -132,12 +162,12 @@ describe("fetchLeaderboard", () => {
 
     const result = await fetchLeaderboard("evt1");
 
-    expect(result).toHaveLength(1);
-    expect(result[0].playerId).toBe("123");
-    expect(result[0].playerName).toBe("Test Player");
-    expect(result[0].scoreToPar).toBe(-5);
-    expect(result[0].status).toBe("finished");
-    expect(result[0].position).toBe("T1");
+    expect(result.scores).toHaveLength(1);
+    expect(result.scores[0].playerId).toBe("123");
+    expect(result.scores[0].playerName).toBe("Test Player");
+    expect(result.scores[0].scoreToPar).toBe(-5);
+    expect(result.scores[0].status).toBe("finished");
+    expect(result.scores[0].position).toBe("T1");
   });
 
   it("maps STATUS_CUT to cut status", async () => {
@@ -149,7 +179,7 @@ describe("fetchLeaderboard", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].status).toBe("cut");
+    expect(result.scores[0].status).toBe("cut");
   });
 
   it("maps STATUS_WD to wd status", async () => {
@@ -161,7 +191,7 @@ describe("fetchLeaderboard", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].status).toBe("wd");
+    expect(result.scores[0].status).toBe("wd");
   });
 
   it("maps STATUS_DQ to dq status", async () => {
@@ -173,7 +203,7 @@ describe("fetchLeaderboard", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].status).toBe("dq");
+    expect(result.scores[0].status).toBe("dq");
   });
 
   it("defaults to playing status for unknown status names", async () => {
@@ -185,7 +215,7 @@ describe("fetchLeaderboard", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].status).toBe("playing");
+    expect(result.scores[0].status).toBe("playing");
   });
 
   it("defaults scoreToPar to 0 when stat is missing", async () => {
@@ -195,21 +225,48 @@ describe("fetchLeaderboard", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].scoreToPar).toBe(0);
+    expect(result.scores[0].scoreToPar).toBe(0);
   });
 
-  it("returns empty array when no events", async () => {
+  it("returns empty scores when no events", async () => {
     global.fetch = mockFetchResponse({ events: [] });
     const result = await fetchLeaderboard("evt1");
-    expect(result).toEqual([]);
+    expect(result).toEqual({ scores: [], cutLine: null, cutRound: null });
   });
 
-  it("returns empty array when no competitions", async () => {
+  it("returns empty scores when no competitions", async () => {
     global.fetch = mockFetchResponse({
       events: [makeESPNEvent({ competitions: [] })],
     });
     const result = await fetchLeaderboard("evt1");
-    expect(result).toEqual([]);
+    expect(result).toEqual({ scores: [], cutLine: null, cutRound: null });
+  });
+
+  it("returns cutLine from tournament.cutScore", async () => {
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ tournament: { displayName: "PGA Championship", major: true, cutScore: 4, cutRound: 2 } })],
+    });
+    const result = await fetchLeaderboard("evt1");
+    expect(result.cutLine).toBe(4);
+    expect(result.cutRound).toBe(2);
+  });
+
+  it("returns null cutLine when tournament has no cutScore", async () => {
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent()],
+    });
+    const result = await fetchLeaderboard("evt1");
+    expect(result.cutLine).toBeNull();
+    expect(result.cutRound).toBeNull();
+  });
+
+  it("returns cutRound 0 for no-cut tournaments", async () => {
+    global.fetch = mockFetchResponse({
+      events: [makeESPNEvent({ tournament: { displayName: "The Sentry", major: false, cutRound: 0 } })],
+    });
+    const result = await fetchLeaderboard("evt1");
+    expect(result.cutRound).toBe(0);
+    expect(result.cutLine).toBeNull();
   });
 
   it("throws on API error", async () => {
@@ -697,8 +754,8 @@ describe("ESPN mapping edge cases", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].roundScores).toBeUndefined();
-    expect(result[0].position).toBeUndefined();
+    expect(result.scores[0].roundScores).toBeUndefined();
+    expect(result.scores[0].position).toBeUndefined();
   });
 
   it("fetchPlayersFromRecentTournament returns empty when fallback has no events with competitors", async () => {
@@ -745,8 +802,8 @@ describe("fetchLeaderboard — thru/displayThru mapping", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].thru).toBe(12);
-    expect(result[0].displayThru).toBe("12");
+    expect(result.scores[0].thru).toBe(12);
+    expect(result.scores[0].displayThru).toBe("12");
   });
 
   it("maps displayThru as 'F' for finished players", async () => {
@@ -763,9 +820,9 @@ describe("fetchLeaderboard — thru/displayThru mapping", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].thru).toBe(18);
-    expect(result[0].displayThru).toBe("F");
-    expect(result[0].status).toBe("finished");
+    expect(result.scores[0].thru).toBe(18);
+    expect(result.scores[0].displayThru).toBe("F");
+    expect(result.scores[0].status).toBe("finished");
   });
 
   it("leaves thru/displayThru undefined when not present", async () => {
@@ -780,8 +837,8 @@ describe("fetchLeaderboard — thru/displayThru mapping", () => {
     });
 
     const result = await fetchLeaderboard("evt1");
-    expect(result[0].thru).toBeUndefined();
-    expect(result[0].displayThru).toBeUndefined();
+    expect(result.scores[0].thru).toBeUndefined();
+    expect(result.scores[0].displayThru).toBeUndefined();
   });
 });
 

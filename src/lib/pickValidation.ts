@@ -20,10 +20,12 @@ const PICK_SLOTS = ["groupA", "groupB", "groupC", "groupD", "wildcard1", "wildca
  * Uses name-based matching (normalised, case-insensitive) per ADR-014.
  */
 export async function validatePartyPicks(party: Party): Promise<ValidationResult> {
-  const [allPicks, leaderboard] = await Promise.all([
+  const [allPicks, leaderboardResult] = await Promise.all([
     getAllPicksForParty(party.id),
     fetchLeaderboard(party.tournamentId),
   ]);
+
+  const leaderboard = leaderboardResult.scores;
 
   // No field data yet — can't validate, assume valid
   if (leaderboard.length === 0) {
